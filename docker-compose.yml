@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   tv-episode-checker:
-    image: yourdockerhubuser/tv-episode-checker:latest
+    image: dhclark18/tv-episode-checker:latest
     container_name: tv-episode-checker
     restart: unless-stopped
     environment:
