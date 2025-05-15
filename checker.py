@@ -1,25 +1,53 @@
-import sys
 import os
+import sys
 import requests
 import re
 import string
+import time
 
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+# TVDB token cache
+_tvdb_token = None
+_tvdb_token_expiry = 0  # Unix timestamp
+
+TVDB_API_KEY = os.getenv("TVDB_API_KEY")
+TVDB_PIN = os.getenv("TVDB_PIN")
 SONARR_API_KEY = os.getenv("SONARR_API_KEY")
 SONARR_URL = os.getenv("SONARR_URL")
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 
-def get_show_episode_title(show_name, season, episode):
-    url = f"https://api.themoviedb.org/3/search/tv?api_key={TMDB_API_KEY}&query={show_name}"
-    resp = requests.get(url)
-    data = resp.json()
-    if not data.get("results"):
+def get_tvdb_token():
+    global _tvdb_token, _tvdb_token_expiry
+    if _tvdb_token and time.time() < _tvdb_token_expiry:
+        return _tvdb_token
+
+    print("🔐 Requesting new TVDB token...")
+    url = "https://api4.thetvdb.com/v4/login"
+    resp = requests.post(url, json={"apikey": TVDB_API_KEY, "pin": TVDB_PIN})
+    resp.raise_for_status()
+    data = resp.json()["data"]
+    _tvdb_token = data["token"]
+    _tvdb_token_expiry = time.time() + 23.5 * 3600  # 23.5 hours for buffer
+    return _tvdb_token
+
+def get_show_id(show_name, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get("https://api4.thetvdb.com/v4/search", params={"query": show_name}, headers=headers)
+    resp.raise_for_status()
+    results = resp.json().get("data", [])
+    if not results:
         return None
-    show_id = data["results"][0]["id"]
-    ep_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season}/episode/{episode}?api_key={TMDB_API_KEY}"
-    ep_resp = requests.get(ep_url)
-    ep_data = ep_resp.json()
-    return ep_data.get("name")
+    return results[0]["tvdb_id"]
+
+def get_episode_title(series_id, season, episode, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    url = f"https://api4.thetvdb.com/v4/series/{series_id}/episodes/default"
+    params = {"season": season, "episodeNumber": episode}
+    resp = requests.get(url, params=params, headers=headers)
+    resp.raise_for_status()
+    data = resp.json().get("data", [])
+    if not data:
+        return None
+    return data[0].get("name")
 
 def parse_filename(filename):
     basename = os.path.basename(filename)
@@ -42,10 +70,7 @@ def clean_title(title):
     return ''.join(c for c in title.lower() if c in string.ascii_lowercase + string.digits)
 
 def notify_sonarr(search_title):
-    params = {
-        "apikey": SONARR_API_KEY,
-        "term": search_title
-    }
+    params = {"apikey": SONARR_API_KEY, "term": search_title}
     resp = requests.get(f"{SONARR_URL}/api/series/lookup", params=params)
     if resp.status_code != 200 or not resp.json():
         print("Sonarr lookup failed or returned nothing.")
@@ -67,32 +92,41 @@ def main():
         print("Could not parse filename for show/season/episode.")
         sys.exit(1)
 
-    tmdb_title = get_show_episode_title(show, season, episode)
-    if not tmdb_title:
-        print("Could not get episode title from TMDb.")
-        sys.exit(1)
+    try:
+        token = get_tvdb_token()
+        show_id = get_show_id(show, token)
+        if not show_id:
+            print(f"Could not find show ID for {show}")
+            sys.exit(1)
 
-    file_title = extract_clean_title_from_filename(filepath)
-    if not file_title:
-        print("Could not extract episode title from filename.")
-        sys.exit(1)
+        tvdb_title = get_episode_title(show_id, season, episode, token)
+        if not tvdb_title:
+            print(f"Could not find episode title for {show} S{season}E{episode}")
+            sys.exit(1)
 
-    cleaned_tmdb = clean_title(tmdb_title)
-    cleaned_file = clean_title(file_title)
+        file_title = extract_clean_title_from_filename(filepath)
+        if not file_title:
+            print("Could not extract episode title from filename.")
+            sys.exit(1)
 
-    if cleaned_tmdb == cleaned_file:
-        print(f"✅ MATCH: {os.path.basename(filepath)} == \"{tmdb_title}\"")
-    else:
-        print(f"❌ MISMATCH: {os.path.basename(filepath)} ≠ \"{tmdb_title}\"")
-        if DRY_RUN:
-            print("🧪 DRY RUN MODE: Not triggering Sonarr.")
+        cleaned_tvdb = clean_title(tvdb_title)
+        cleaned_file = clean_title(file_title)
+
+        if cleaned_tvdb == cleaned_file:
+            print(f"✅ MATCH: {os.path.basename(filepath)} == \"{tvdb_title}\"")
         else:
-            print("🔁 Triggering Sonarr redownload...")
-            success = notify_sonarr(show)
-            if success:
-                print("✅ Sonarr search triggered.")
+            print(f"❌ MISMATCH: {os.path.basename(filepath)} ≠ \"{tvdb_title}\"")
+            if DRY_RUN:
+                print("🧪 DRY RUN MODE: Not triggering Sonarr.")
             else:
-                print("❌ Failed to trigger Sonarr.")
+                print("🔁 Triggering Sonarr redownload...")
+                if notify_sonarr(show):
+                    print("✅ Sonarr search triggered.")
+                else:
+                    print("❌ Failed to trigger Sonarr.")
+    except Exception as e:
+        print(f"⚠️ Error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
