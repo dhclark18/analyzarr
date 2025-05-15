@@ -1,4 +1,3 @@
-# checker.py placeholder contentimport sys
 import os
 import requests
 import re
