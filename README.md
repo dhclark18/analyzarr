@@ -10,6 +10,7 @@ This Docker-based tool verifies that downloaded TV episode filenames match offic
 
 ## Requirements
 - Sonarr file name format must be {Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{...}]
+  
 ## Setup
 
 1. Fill in API keys and Sonarr URL in:
