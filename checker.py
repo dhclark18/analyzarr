@@ -25,20 +25,7 @@ def get_series_by_tvdbid(tvdbid):
     except Exception as e:
         print(f"❌ Error fetching series: {e}")
     return None
-
-def get_episode_title(series, season_number, episode_number):
-    url = f"{SONARR_URL}/episode"
-    try:
-        response = requests.get(url, headers=HEADERS)
-        response.raise_for_status()
-        episodes = response.json()
-        for ep in episodes:
-            if ep["seriesId"] == series["id"] and ep["seasonNumber"] == season_number and ep["episodeNumber"] == episode_number:
-                return ep["title"]
-    except Exception as e:
-        print(f"❌ Error fetching episode: {e}")
-    return None
-
+    
 def process_file(file_path):
     print(f"📺 Checking: {file_path}")
     filename = Path(file_path).name
