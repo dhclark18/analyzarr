@@ -4,7 +4,7 @@ This Docker-based tool verifies that downloaded TV episode filenames match offic
 
 ## Features
 
-- Auto-checks TV episode filenames against TMDb
+- Auto-checks TV episode filenames against TVDb
 - Triggers Sonarr redownload via its API
 - Supports real-time directory watching
 
