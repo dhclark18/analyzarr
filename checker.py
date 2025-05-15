@@ -1,168 +1,90 @@
 import os
 import re
-import time
-import json
 import requests
-from urllib.parse import quote_plus
+import time
 
-WATCH_DIR = os.getenv("WATCH_DIR", "/watched")
-TVDB_API_KEY = os.getenv("TVDB_API_KEY")
-TVDB_PIN = os.getenv("TVDB_PIN")
+WATCHED_DIR = "/watched"
+API_KEY = os.getenv("TVDB_API_KEY")
+USER_TOKEN = os.getenv("TVDB_USER_TOKEN")
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 
-_tvdb_token = None
-_tvdb_token_expiry = 0  # Unix timestamp
+BASE_URL = "https://api4.thetvdb.com/v4"
+TOKEN_CACHE = {"token": None, "expires": 0}
 
-
-def get_tvdb_token(force_refresh=False):
-    global _tvdb_token, _tvdb_token_expiry
-    if not force_refresh and _tvdb_token and time.time() < _tvdb_token_expiry:
-        return _tvdb_token
+def get_token():
+    if TOKEN_CACHE["token"] and TOKEN_CACHE["expires"] > time.time():
+        return TOKEN_CACHE["token"]
 
     print("🔐 Requesting new TVDB token...")
-    url = "https://api4.thetvdb.com/v4/login"
-    payload = {
-        "apikey": TVDB_API_KEY,
-        "pin": TVDB_PIN
-    }
-    resp = requests.post(url, json=payload)
-    resp.raise_for_status()
-    data = resp.json()["data"]
-    _tvdb_token = data["token"]
-    _tvdb_token_expiry = time.time() + 23.5 * 3600
-    return _tvdb_token
+    headers = {"Content-Type": "application/json"}
+    data = {"apikey": API_KEY, "user_token": USER_TOKEN}
+    response = requests.post(f"{BASE_URL}/login", json=data, headers=headers)
+    response.raise_for_status()
+    token = response.json()["data"]["token"]
+    TOKEN_CACHE["token"] = token
+    TOKEN_CACHE["expires"] = time.time() + 86400
+    return token
 
-
-def get_tvdb_show_id(show_name):
-    # Remove year like (2005) and special characters
-    clean_name = re.sub(r"\s*\(\d{4}\)", "", show_name).strip()
-    clean_name = re.sub(r"[!]", "", clean_name)
-
-    url = f"https://api4.thetvdb.com/v4/search?query={quote_plus(clean_name)}"
-    headers = {"Authorization": f"Bearer {get_tvdb_token()}"}
-    resp = requests.get(url, headers=headers)
-
-    if resp.status_code == 401:
-        print("🔄 Token expired or invalid, refreshing...")
-        headers["Authorization"] = f"Bearer {get_tvdb_token(force_refresh=True)}"
-        resp = requests.get(url, headers=headers)
-
-    if resp.status_code != 200:
-        print(f"❌ TVDB search failed: {resp.status_code}")
+def get_episode_title(show_id, season_num, episode_num):
+    headers = {"Authorization": f"Bearer {get_token()}"}
+    url = f"{BASE_URL}/series/{show_id}/episodes/default/{season_num}/{episode_num}"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
         return None
+    return response.json()["data"]["name"]
 
-    data = resp.json().get("data", [])
-    if not data:
-        print(f"❌ Could not find show ID for {show_name}")
-        return None
-
-    return data[0].get("tvdb_id")
-
-
-def get_episode_title(tvdb_id, season, episode):
-    url = f"https://api4.thetvdb.com/v4/series/{tvdb_id}/episodes/default?season={season}&episodeNumber={episode}"
-    headers = {"Authorization": f"Bearer {get_tvdb_token()}"}
-    resp = requests.get(url, headers=headers)
-
-    if resp.status_code == 401:
-        headers["Authorization"] = f"Bearer {get_tvdb_token(force_refresh=True)}"
-        resp = requests.get(url, headers=headers)
-
-    if resp.status_code != 200:
-        print(f"❌ Failed to get episode title: {resp.status_code}")
-        return None
-
-    return resp.json().get("data", {}).get("name")
-
-
-def parse_episode_info(filename):
-    match = re.search(r"S(\d{2})E(\d{2})", filename, re.IGNORECASE)
+def extract_info_from_filename(filename):
+    match = re.search(r"S(\d{2})E(\d{2})\s*-\s*(.*?)\s*(\[|$)", filename, re.IGNORECASE)
     if not match:
-        return None, None
-    return int(match.group(1)), int(match.group(2))
+        return None
+    season = int(match.group(1))
+    episode = int(match.group(2))
+    title_part = match.group(3)
+    return season, episode, title_part
 
+def check_files():
+    print(f"📁 Scanning directory: {WATCHED_DIR}")
+    mismatched_count = 0
+    matched_count = 0
 
-def extract_show_name(filename):
-    match = re.search(r"^(.*?)(?:\s*-\s*S\d{2}E\d{2})", filename)
-    return match.group(1).strip() if match else None
+    for root, _, files in os.walk(WATCHED_DIR):
+        for file in files:
+            if not file.lower().endswith((".mkv", ".mp4", ".avi")):
+                continue
+            full_path = os.path.join(root, file)
+            print(f"📺 Running checker on: {full_path}")
 
+            season_episode_info = extract_info_from_filename(file)
+            if not season_episode_info:
+                print("⚠️ Skipped (no SxxExx match):", file)
+                continue
 
-def scan_directory():
-    print(f"📁 Scanning directory: {WATCH_DIR}")
-    for fname in os.listdir(WATCH_DIR):
-        if not fname.lower().endswith((".mkv", ".mp4", ".avi")):
-            continue
+            season, episode, filename_title = season_episode_info
+            parent_folder = os.path.basename(os.path.dirname(full_path))
+            series_folder = os.path.basename(os.path.dirname(os.path.dirname(full_path)))
+            series_match = re.match(r"(.*?)\s*\((\d{4})\)?\s*\{tvdb-(\d+)\}", series_folder)
+            if not series_match:
+                print(f"⚠️ Could not extract show info from folder name: {series_folder}")
+                continue
 
-        show_name = extract_show_name(fname)
-        if not show_name:
-            print(f"⚠️ Could not extract show name from: {fname}")
-            continue
+            series_name, year_hint, tvdb_id = series_match.groups()
+            episode_title = get_episode_title(tvdb_id, season, episode)
+            if not episode_title:
+                print(f"⚠️ Could not fetch episode title for S{season:02}E{episode:02}")
+                continue
 
-        season, episode = parse_episode_info(fname)
-        if season is None:
-            print(f"⚠️ Could not parse episode from: {fname}")
-            continue
+            if episode_title.lower() in filename_title.lower():
+                print(f"✅ Title match: '{episode_title}' in '{filename_title}'")
+                matched_count += 1
+            else:
+                print(f"❌ Title mismatch: Expected '{episode_title}', Found '{filename_title}'")
+                mismatched_count += 1
+                if not DRY_RUN:
+                    print(f"🛠️ Would trigger redownload for: {file}")
+                else:
+                    print(f"🔍 DRY RUN: Skipping redownload for: {file}")
 
-        show_id = get_tvdb_show_id(show_name)
-        if not show_id:
-            continue
-
-        expected_title = get_episode_title(show_id, season, episode)
-        if not expected_title:
-            print(f"⚠️ Could not fetch episode title for {show_name} S{season:02d}E{episode:02d}")
-            continue
-
-        if expected_title.lower() not in fname.lower():
-            print(f"❌ Title mismatch: {fname}")
-            print(f"   ⟶ Expected episode title: {expected_title}")
-            if not DRY_RUN:
-                trigger_redownload(show_name, season, episode)
-        else:
-            print(f"✅ Title matches: {fname}")
-
-
-def trigger_redownload(show_name, season, episode):
-    headers = {"X-Api-Key": SONARR_API_KEY}
-    print(f"🔁 Triggering redownload via Sonarr: {show_name} S{season:02d}E{episode:02d}")
-
-    # Step 1: Get series ID from Sonarr
-    try:
-        series_resp = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
-        series_resp.raise_for_status()
-        series_list = series_resp.json()
-        series = next((s for s in series_list if show_name.lower() in s["title"].lower()), None)
-
-        if not series:
-            print(f"❌ Could not find show '{show_name}' in Sonarr")
-            return
-
-        # Step 2: Trigger episode search
-        payload = {
-            "name": "EpisodeSearch",
-            "seriesId": series["id"],
-            "episodeIds": []
-        }
-
-        # Find episode ID
-        eps_resp = requests.get(f"{SONARR_URL}/api/v3/episode?seriesId={series['id']}", headers=headers)
-        eps_resp.raise_for_status()
-        episodes = eps_resp.json()
-        for ep in episodes:
-            if ep["seasonNumber"] == season and ep["episodeNumber"] == episode:
-                payload["episodeIds"].append(ep["id"])
-                break
-
-        if not payload["episodeIds"]:
-            print(f"❌ Could not find episode {season}x{episode} in Sonarr")
-            return
-
-        post_resp = requests.post(f"{SONARR_URL}/api/v3/command", headers=headers, json=payload)
-        post_resp.raise_for_status()
-        print(f"✅ Redownload triggered in Sonarr for {show_name} S{season:02d}E{episode:02d}")
-
-    except requests.RequestException as e:
-        print(f"❌ Failed to contact Sonarr: {e}")
-
+    print(f"🔎 Scan complete: {matched_count} matched, {mismatched_count} mismatched")
 
 if __name__ == "__main__":
-    scan_directory()
+    check_files()
