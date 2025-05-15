@@ -26,6 +26,25 @@ def get_series_by_tvdbid(tvdbid):
         print(f"❌ Error fetching series: {e}")
     return None
     
+def get_episode_title(series_id, season_number, episode_number):
+    url = f"{SONARR_URL}/episode"
+    params = {
+        "seriesId": series_id,
+        "seasonNumber": season_number,
+        "episodeNumber": episode_number
+    }
+    try:
+        response = requests.get(url, headers=HEADERS, params=params)
+        response.raise_for_status()
+        episodes = response.json()
+        if isinstance(episodes, list) and episodes:
+            return episodes[0]["title"]
+        elif isinstance(episodes, dict) and "title" in episodes:
+            return episodes["title"]
+    except Exception as e:
+        print(f"❌ Error fetching episode: {e}")
+    return None
+    
 def process_file(file_path):
     print(f"📺 Checking: {file_path}")
     filename = Path(file_path).name
