@@ -7,8 +7,9 @@ This Docker-based tool verifies that downloaded TV episode filenames match offic
 - Auto-checks TV episode filenames against TMDb
 - Triggers Sonarr redownload via its API
 - Supports real-time directory watching
-- SABnzbd post-processing script with cooldown
 
+## Requirements
+- Sonarr file name format must be {Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{...}]
 ## Setup
 
 1. Fill in API keys and Sonarr URL in:
