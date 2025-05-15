@@ -29,18 +29,16 @@ def get_series_by_tvdbid(tvdbid):
 def get_episode_title(series_id, season_number, episode_number):
     url = f"{SONARR_URL}/episode"
     params = {
-        "seriesId": series_id,
+        "seriesId": series_id,           # Must be an integer ID like 123
         "seasonNumber": season_number,
         "episodeNumber": episode_number
     }
     try:
-        response = requests.get(url, headers=HEADERS, params=params)
-        response.raise_for_status()
-        episodes = response.json()
+        resp = requests.get(url, headers=HEADERS, params=params)
+        resp.raise_for_status()
+        episodes = resp.json()
         if isinstance(episodes, list) and episodes:
-            return episodes[0]["title"]
-        elif isinstance(episodes, dict) and "title" in episodes:
-            return episodes["title"]
+            return episodes[0].get("title")
     except Exception as e:
         print(f"❌ Error fetching episode: {e}")
     return None
