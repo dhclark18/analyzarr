@@ -1,6 +1,6 @@
 # TV Episode Filename Checker
 
-This Docker-based tool verifies that downloaded TV episode filenames match official titles (via TMDb) and triggers Sonarr to re-download them if they don’t.
+This Docker-based tool verifies that downloaded TV episode filenames match official titles (via TVDb) and triggers Sonarr to re-download them if they don’t.
 
 ## Features
 
