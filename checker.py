@@ -1,106 +1,98 @@
 import os
 import re
+import json
 import requests
+from pathlib import Path
 
-# Sonarr config
-SONARR_API_KEY = os.getenv("SONARR_API_KEY", "your_api_key_here")
-SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989/api/v3")
-AUTO_REDOWNLOAD = os.getenv("AUTO_REDOWNLOAD", "false").lower() in ("1", "true", "yes")
+SONARR_URL = os.environ.get("SONARR_URL")  # e.g., http://sonarr.local:8989/api/v3
+SONARR_API_KEY = os.environ.get("SONARR_API_KEY")
+AUTO_REDOWNLOAD = os.environ.get("AUTO_REDOWNLOAD", "false").lower() == "true"
 
-HEADERS = {
-    "X-Api-Key": SONARR_API_KEY
-}
+HEADERS = {"X-Api-Key": SONARR_API_KEY}
+
+EPISODE_PATTERN = re.compile(r"[Ss](\d+)[Ee](\d+)")
+TVDB_ID_PATTERN = re.compile(r"\{tvdb-(\d+)\}")
 
 def get_series_by_tvdbid(tvdbid):
+    url = f"{SONARR_URL}/series"
     try:
-        resp = requests.get(f"{SONARR_URL}/series", headers=HEADERS)
-        resp.raise_for_status()
-        for series in resp.json():
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()
+        series_list = response.json()
+        for series in series_list:
             if str(series.get("tvdbId")) == str(tvdbid):
                 return series
     except Exception as e:
         print(f"❌ Error fetching series: {e}")
     return None
 
-def get_episode(series_id, season_num, episode_num):
+def get_episode_title(series, season_number, episode_number):
+    url = f"{SONARR_URL}/episode"
     try:
-        resp = requests.get(
-            f"{SONARR_URL}/episode?seriesId={series_id}",
-            headers=HEADERS
-        )
-        resp.raise_for_status()
-        for ep in resp.json():
-            if ep["seasonNumber"] == season_num and ep["episodeNumber"] == episode_num:
-                return ep
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()
+        episodes = response.json()
+        for ep in episodes:
+            if ep["seriesId"] == series["id"] and ep["seasonNumber"] == season_number and ep["episodeNumber"] == episode_number:
+                return ep["title"]
     except Exception as e:
         print(f"❌ Error fetching episode: {e}")
     return None
 
-def request_redownload(episode_id):
-    try:
-        resp = requests.post(
-            f"{SONARR_URL}/command",
-            json={
-                "name": "EpisodeSearch",
-                "episodeIds": [episode_id]
-            },
-            headers=HEADERS
-        )
-        resp.raise_for_status()
-        print("🔁 Requested redownload from Sonarr")
-    except Exception as e:
-        print(f"❌ Failed to request redownload: {e}")
+def process_file(file_path):
+    print(f"📺 Checking: {file_path}")
+    filename = Path(file_path).name
+    parent_folder = Path(file_path).parent.parent.name  # should contain the tvdb ID
 
-def extract_info_from_path(filepath):
-    match = re.search(r"\{tvdb-(\d+)\}", filepath)
-    tvdbid = match.group(1) if match else None
+    tvdb_id_match = TVDB_ID_PATTERN.search(parent_folder)
+    episode_match = EPISODE_PATTERN.search(filename)
 
-    match = re.search(r"S(\d{2})E(\d{2})", filepath, re.IGNORECASE)
-    if not match:
-        return None, None, None, None
-    season_num = int(match.group(1))
-    episode_num = int(match.group(2))
+    if not tvdb_id_match or not episode_match:
+        print(f"⚠️ Skipping due to missing metadata: {file_path}")
+        return
 
-    # Attempt to extract title
-    title_match = re.search(r"- S\d{2}E\d{2} - (.+?)\[", filepath)
-    filename_title = title_match.group(1).strip() if title_match else None
+    tvdb_id = tvdb_id_match.group(1)
+    season_number = int(episode_match.group(1))
+    episode_number = int(episode_match.group(2))
 
-    return tvdbid, season_num, episode_num, filename_title
+    series = get_series_by_tvdbid(tvdb_id)
+    if not series:
+        print(f"⚠️ No matching series found in Sonarr for tvdb-{tvdb_id}")
+        return
 
-def walk_and_check(root_dir):
-    for dirpath, _, filenames in os.walk(root_dir):
-        for file in filenames:
-            if not file.lower().endswith((".mkv", ".mp4")):
-                continue
+    expected_title = get_episode_title(series, season_number, episode_number)
+    if not expected_title:
+        print(f"⚠️ Could not find episode title in Sonarr for S{season_number:02d}E{episode_number:02d}")
+        return
 
-            full_path = os.path.join(dirpath, file)
-            print(f"\n📺 Checking: {full_path}")
+    expected_title_normalized = re.sub(r"\W+", "", expected_title).lower()
+    filename_normalized = re.sub(r"\W+", "", filename).lower()
 
-            tvdbid, season, episode, found_title = extract_info_from_path(full_path)
-            if not all([tvdbid, season, episode]):
-                print("⚠️ Could not extract episode info from filename.")
-                continue
+    if expected_title_normalized in filename_normalized:
+        print(f"✅ Title match: {expected_title}")
+    else:
+        print(f"❌ Title mismatch. Expected: {expected_title}")
+        if AUTO_REDOWNLOAD:
+            print("♻️ Triggering redownload via Sonarr...")
+            try:
+                ep_id = next(ep["id"] for ep in requests.get(f"{SONARR_URL}/episode", headers=HEADERS).json()
+                             if ep["seriesId"] == series["id"]
+                             and ep["seasonNumber"] == season_number
+                             and ep["episodeNumber"] == episode_number)
+                res = requests.post(f"{SONARR_URL}/command", headers=HEADERS, json={
+                    "name": "EpisodeSearch",
+                    "episodeIds": [ep_id]
+                })
+                res.raise_for_status()
+                print("🚀 Redownload triggered.")
+            except Exception as e:
+                print(f"❌ Failed to trigger redownload: {e}")
 
-            series = get_series_by_tvdbid(tvdbid)
-            if not series:
-                print(f"⚠️ No matching series found in Sonarr for tvdb-{tvdbid}")
-                continue
-
-            episode_data = get_episode(series["id"], season, episode)
-            if not episode_data:
-                print(f"⚠️ Episode S{season:02d}E{episode:02d} not found in Sonarr.")
-                continue
-
-            expected_title = episode_data["title"]
-            if found_title and expected_title.lower() not in found_title.lower():
-                print(f"❌ Mismatch: filename has \"{found_title}\" but Sonarr says \"{expected_title}\"")
-                if AUTO_REDOWNLOAD:
-                    request_redownload(episode_data["id"])
-                else:
-                    print("🚫 AUTO_REDOWNLOAD is off; not requesting redownload")
-            else:
-                print(f"✅ Title matched: {expected_title}")
+def walk_directory(watched_dir="/watched"):
+    for root, _, files in os.walk(watched_dir):
+        for name in files:
+            if name.endswith(".mkv"):
+                process_file(os.path.join(root, name))
 
 if __name__ == "__main__":
-    root_directory = "/watched"
-    walk_and_check(root_directory)
+    walk_directory()
