@@ -1,78 +1,50 @@
-import os
 import time
-import subprocess
+import os
 import threading
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from subprocess import run
 
-WATCH_PATH = os.getenv("WATCH_PATH", "/watched")
-VIDEO_EXTENSIONS = (".mkv", ".mp4", ".avi")
-COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "30"))
+WATCH_DIR = "/watched"
+CHECKER_SCRIPT = "/app/checker.py"
+COOLDOWN_SECONDS = 10
 
-changed_files = set()
+last_event_time = 0
 cooldown_timer = None
-lock = threading.Lock()
 
-def run_checker(filepath):
-    if filepath.lower().endswith(VIDEO_EXTENSIONS):
-        print(f"📺 Running checker on: {filepath}")
-        subprocess.run(["python3", "/app/checker.py", filepath])
+def run_checker():
+    print("📁 Scanning directory:", WATCH_DIR)
+    run(["python3", CHECKER_SCRIPT])
 
-def initial_scan():
-    print("🔍 Running initial scan...")
-    for root, _, files in os.walk(WATCH_PATH):
-        for f in files:
-            full_path = os.path.join(root, f)
-            run_checker(full_path)
-    print("✅ Initial scan complete.\n")
+class ChangeHandler(FileSystemEventHandler):
+    def on_any_event(self, event):
+        global last_event_time, cooldown_timer
+        now = time.time()
+        last_event_time = now
 
-def process_changed_files():
-    global cooldown_timer
-    with lock:
-        files_to_process = list(changed_files)
-        changed_files.clear()
-        cooldown_timer = None
-    print(f"⏱️ Cooldown ended. Processing {len(files_to_process)} file(s)...")
-    for f in files_to_process:
-        run_checker(f)
+        if cooldown_timer and cooldown_timer.is_alive():
+            return
 
-def debounce_file(filepath):
-    global cooldown_timer
-    with lock:
-        changed_files.add(filepath)
-        if cooldown_timer:
-            cooldown_timer.cancel()
-        cooldown_timer = threading.Timer(COOLDOWN_SECONDS, process_changed_files)
+        def cooldown_worker():
+            while time.time() - last_event_time < COOLDOWN_SECONDS:
+                time.sleep(1)
+            run_checker()
+
+        cooldown_timer = threading.Thread(target=cooldown_worker)
         cooldown_timer.start()
 
-class WatchHandler(FileSystemEventHandler):
-    def on_created(self, event):
-        if not event.is_directory and event.src_path.lower().endswith(VIDEO_EXTENSIONS):
-            debounce_file(event.src_path)
+if __name__ == "__main__":
+    print("🚀 Watcher starting up...")
+    run_checker()
 
-    def on_modified(self, event):
-        if not event.is_directory and event.src_path.lower().endswith(VIDEO_EXTENSIONS):
-            debounce_file(event.src_path)
-
-def main():
-    if not os.path.exists(WATCH_PATH):
-        print(f"❌ Watch path does not exist: {WATCH_PATH}")
-        return
-
-    initial_scan()
-
-    print(f"👀 Watching for changes in: {WATCH_PATH}")
+    event_handler = ChangeHandler()
     observer = Observer()
-    observer.schedule(WatchHandler(), path=WATCH_PATH, recursive=True)
+    observer.schedule(event_handler, path=WATCH_DIR, recursive=True)
     observer.start()
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("🛑 Stopping watcher...")
         observer.stop()
     observer.join()
-
-if __name__ == "__main__":
-    main()
