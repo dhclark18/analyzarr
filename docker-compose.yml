@@ -1,1 +1,15 @@
-# docker-compose placeholder content
+version: '3.8'
+
+services:
+  tv-episode-checker:
+    image: yourdockerhubuser/tv-episode-checker:latest
+    container_name: tv-episode-checker
+    restart: unless-stopped
+    environment:
+      - TMDB_API_KEY=your_tmdb_api_key
+      - SONARR_API_KEY=your_sonarr_api_key
+      - SONARR_URL=http://your-sonarr:8989
+      - WATCH_PATH=/watched
+    volumes:
+      - /path/to/your/downloads:/watched:ro
+    entrypoint: ["python", "watcher.py"]
