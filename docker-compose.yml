@@ -6,11 +6,13 @@ services:
     container_name: tv-episode-checker
     restart: unless-stopped
     environment:
-      - TMDB_API_KEY=your_tmdb_api_key
+      - TVDB_API_KEY=your_api_key
+      - TVDB_PIN=your_pin
       - SONARR_API_KEY=your_sonarr_api_key
       - SONARR_URL=http://your-sonarr:8989
       - WATCH_PATH=/watched
       - DRY_RUN=true   # <— Enable dry-run mode
+      
     volumes:
       - /path/to/your/downloads:/watched:ro
     entrypoint: ["python", "watcher.py"]
