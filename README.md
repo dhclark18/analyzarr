@@ -1,1 +1,1 @@
-# episode-checker
+# README placeholder content
