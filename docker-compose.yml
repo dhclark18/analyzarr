@@ -1,16 +1,11 @@
-version: '3.8'
-
+version: "3.8"
 services:
-  tv-episode-checker:
-    image: dhclark18/tv-episode-checker:latest
-    container_name: tv-episode-checker
-    restart: unless-stopped
+  sonarr-scanner:
+    build: .
     environment:
-      - SONARR_API_KEY=your_sonarr_api_key
-      - SONARR_URL=http://your-sonarr:8989
-      - WATCH_PATH=/watched
-      - AUTO_REDOWNLOAD=true
-      
+      SONARR_URL: http://192.168.1.71:8989
+      SONARR_API_KEY: your-api-key
+      CHECK_COOLDOWN: 60
     volumes:
-      - /path/to/your/downloads:/watched:ro
-    entrypoint: ["python", "watcher.py"]
+      - /path/to/your/tv:/watched:ro
+      - /path/to/logs:/logs
