@@ -114,7 +114,7 @@ def compare_titles(tvdb_id, season, episode):
 if __name__ == "__main__":
     import sys
     if len(sys.argv) != 4:
-        print("Usage: python compare_scene_vs_filename.py <tvdbId> <season> <episode>")
+        print("Usage: python checker.py <tvdbId> <season> <episode>")
         sys.exit(1)
 
     if not SONARR_API_KEY:
