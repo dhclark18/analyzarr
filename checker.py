@@ -24,7 +24,7 @@ SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
 SONARR_API_KEY = os.getenv("SONARR_API_KEY")
 HEADERS = {"X-Api-Key": SONARR_API_KEY}
 
-# --- Normalization ---
+# --- Helpers ---
 def normalize_title(title):
     if not title:
         return ""
@@ -32,29 +32,6 @@ def normalize_title(title):
     title = unicodedata.normalize("NFKD", title)
     return "".join(c for c in title if c.isalnum()).lower()
 
-# --- API ---
-def get_series_by_tvdbid(tvdb_id):
-    resp = requests.get(f"{SONARR_URL}/api/v3/series", headers=HEADERS)
-    resp.raise_for_status()
-    for series in resp.json():
-        if series.get("tvdbId") == int(tvdb_id):
-            return series
-    return None
-
-def get_episode(series_id, season, episode):
-    resp = requests.get(f"{SONARR_URL}/api/v3/episode?seriesId={series_id}", headers=HEADERS)
-    resp.raise_for_status()
-    for ep in resp.json():
-        if ep["seasonNumber"] == season and ep["episodeNumber"] == episode:
-            return ep
-    return None
-
-def get_episode_file(episode_file_id):
-    resp = requests.get(f"{SONARR_URL}/api/v3/episodefile/{episode_file_id}", headers=HEADERS)
-    resp.raise_for_status()
-    return resp.json()
-
-# --- Title extraction ---
 def extract_title_from_filename(name):
     match = re.search(r"S\d{2}E\d{2} - (.+?) \[", name)
     return match.group(1) if match else ""
@@ -69,60 +46,74 @@ def extract_title_from_scene_name(scene_name):
         return match.group(1).replace(".", " ").strip()
     return ""
 
-# --- Main Logic ---
-def compare_titles(tvdb_id, season, episode):
-    series = get_series_by_tvdbid(tvdb_id)
-    if not series:
-        logging.error(f"Series with tvdbId {tvdb_id} not found.")
+# --- API ---
+def get_series_list():
+    resp = requests.get(f"{SONARR_URL}/api/v3/series", headers=HEADERS)
+    resp.raise_for_status()
+    return resp.json()
+
+def get_episodes(series_id):
+    resp = requests.get(f"{SONARR_URL}/api/v3/episode?seriesId={series_id}", headers=HEADERS)
+    resp.raise_for_status()
+    return resp.json()
+
+def get_episode_file(file_id):
+    resp = requests.get(f"{SONARR_URL}/api/v3/episodefile/{file_id}", headers=HEADERS)
+    resp.raise_for_status()
+    return resp.json()
+
+# --- Main Checker ---
+def check_episode(series, episode):
+    if not episode.get("hasFile") or not episode.get("episodeFileId"):
         return
 
-    episode_info = get_episode(series["id"], season, episode)
-    if not episode_info:
-        logging.error(f"Episode S{season:02}E{episode:02} not found.")
+    try:
+        epfile = get_episode_file(episode["episodeFileId"])
+    except Exception as e:
+        logging.error(f"Failed to get file for {series['title']} S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}: {e}")
         return
 
-    if not episode_info.get("hasFile"):
-        logging.warning(f"Episode S{season:02}E{episode:02} has no file.")
-        return
+    expected_title = episode.get("title")
+    filename = Path(epfile.get("relativePath", "")).name
+    scene_name = epfile.get("sceneName")
 
-    episode_file = get_episode_file(episode_info["episodeFileId"])
-    scene_name = episode_file.get("sceneName")
-    relative_path = Path(episode_file.get("relativePath", "")).name
-    expected_title = episode_info.get("title")
+    file_title = extract_title_from_filename(filename)
+    scene_title = extract_title_from_scene_name(scene_name or "")
 
-    title_from_filename = extract_title_from_filename(relative_path)
-    title_from_scene = extract_title_from_scene_name(scene_name or "")
+    nf, ne, ns = map(normalize_title, [file_title, expected_title, scene_title])
 
-    logging.info(f"\n📺 {series['title']} S{season:02}E{episode:02}")
+    episode_code = f"S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}"
+    logging.info(f"\n📺 {series['title']} {episode_code}")
     logging.info(f"🎯 Expected title : {expected_title}")
-    logging.info(f"📁 File title     : {title_from_filename}")
-    logging.info(f"🎞️  Scene title    : {title_from_scene or '[unknown]'}")
-
-    nf, ne, ns = map(normalize_title, [title_from_filename, expected_title, title_from_scene])
+    logging.info(f"📁 File title     : {file_title}")
+    logging.info(f"🎞️  Scene title    : {scene_title or '[unknown]'}")
 
     if nf != ne:
-        logging.error("File title does NOT match expected title.")
+        logging.error("❌ File title does NOT match expected title.")
     else:
-        logging.info("File title matches expected title.")
+        logging.info("✅ File title matches expected title.")
 
-    if ns and ns != ne:
-        logging.error("Scene title does NOT match expected title.")
-    elif ns:
-        logging.info("Scene title matches expected title.")
+    if scene_title:
+        if ns != ne:
+            logging.error("❌ Scene title does NOT match expected title.")
+        else:
+            logging.info("✅ Scene title matches expected title.")
 
 # --- Entry Point ---
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) != 4:
-        print("Usage: python checker.py <tvdbId> <season> <episode>")
-        sys.exit(1)
-
+def scan_library():
     if not SONARR_API_KEY:
-        logging.error("SONARR_API_KEY environment variable is not set.")
-        sys.exit(1)
+        logging.error("❌ SONARR_API_KEY environment variable is not set.")
+        return
 
-    tvdb_id = int(sys.argv[1])
-    season = int(sys.argv[2])
-    episode = int(sys.argv[3])
+    try:
+        all_series = get_series_list()
+        for series in all_series:
+            logging.info(f"\n=== Scanning: {series['title']} ===")
+            episodes = get_episodes(series["id"])
+            for episode in episodes:
+                check_episode(series, episode)
+    except Exception as e:
+        logging.error(f"Library scan failed: {e}")
 
-    compare_titles(tvdb_id, season, episode)
+if __name__ == "__main__":
+    scan_library()
