@@ -23,10 +23,11 @@ TVDB_ID_PATTERN = re.compile(r"\{tvdb-(\d+)\}")
 TITLE_IN_FILENAME = re.compile(r"S\d{2}E\d{2} - (.+?) \[")
 
 def normalize_title(title):
-    """Normalize titles for comparison: remove punctuation, accents, spaces, and lowercase."""
+    """Normalize titles: replace & with 'and', remove punctuation/spaces/case/accents."""
+    title = title.replace("&", "and")
     title = unicodedata.normalize("NFKD", title)
     return "".join(c for c in title if c.isalnum()).lower()
-
+    
 def get_series_by_tvdbid(tvdbid):
     url = f"{SONARR_URL}/series"
     try:
