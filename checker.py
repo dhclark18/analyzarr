@@ -1,126 +1,128 @@
-#!/usr/bin/env python3
 import os
 import re
 import requests
+from pathlib import Path
 import unicodedata
 import logging
-from pathlib import Path
-from datetime import datetime
 
-# Setup logging
+# --- Logging Setup ---
 LOG_DIR = os.getenv("LOG_PATH", "/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
-log_file_path = os.path.join(LOG_DIR, "checker.log")
+LOG_FILE = os.path.join(LOG_DIR, "scene_check.log")
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s: %(message)s",
+    format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler(log_file_path, encoding='utf-8'),
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
         logging.StreamHandler()
     ]
 )
 
-# Environment config
-raw_url = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
-SONARR_URL = raw_url + "/api/v3" if not raw_url.endswith("/api/v3") else raw_url
+# --- Config ---
+SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
 SONARR_API_KEY = os.getenv("SONARR_API_KEY")
-AUTO_REDOWNLOAD = os.getenv("AUTO_REDOWNLOAD", "false").lower() == "true"
-
-if not SONARR_API_KEY:
-    logging.error("SONARR_API_KEY environment variable not set")
-    exit(1)
-
 HEADERS = {"X-Api-Key": SONARR_API_KEY}
 
-# Regex patterns
-EPISODE_PATTERN = re.compile(r"[Ss](\d{2})[Ee](\d{2})")
-TVDB_ID_PATTERN = re.compile(r"\{tvdb-(\d+)\}")
-TITLE_IN_FILENAME = re.compile(r"S\d{2}E\d{2} - (.+?) \[")
-
+# --- Normalization ---
 def normalize_title(title):
-    """Normalize titles for comparison: replace &, strip accents, punctuation, spaces, lowercase."""
+    if not title:
+        return ""
     title = title.replace("&", "and")
     title = unicodedata.normalize("NFKD", title)
     return "".join(c for c in title if c.isalnum()).lower()
 
-def get_series_by_tvdbid(tvdbid):
-    try:
-        resp = requests.get(f"{SONARR_URL}/series", headers=HEADERS)
-        resp.raise_for_status()
-        for series in resp.json():
-            if str(series.get("tvdbId")) == str(tvdbid):
-                return series
-    except Exception as e:
-        logging.error(f"Error fetching series: {e}")
+# --- API ---
+def get_series_by_tvdbid(tvdb_id):
+    resp = requests.get(f"{SONARR_URL}/api/v3/series", headers=HEADERS)
+    resp.raise_for_status()
+    for series in resp.json():
+        if series.get("tvdbId") == int(tvdb_id):
+            return series
     return None
 
-def get_episode_by_number(series_id, season_number, episode_number):
-    try:
-        resp = requests.get(f"{SONARR_URL}/episode?seriesId={series_id}", headers=HEADERS)
-        resp.raise_for_status()
-        for ep in resp.json():
-            if ep["seasonNumber"] == season_number and ep["episodeNumber"] == episode_number:
-                return ep["title"], ep["id"]
-    except Exception as e:
-        logging.error(f"Error fetching episode list: {e}")
-    return None, None
+def get_episode(series_id, season, episode):
+    resp = requests.get(f"{SONARR_URL}/api/v3/episode?seriesId={series_id}", headers=HEADERS)
+    resp.raise_for_status()
+    for ep in resp.json():
+        if ep["seasonNumber"] == season and ep["episodeNumber"] == episode:
+            return ep
+    return None
 
-def trigger_redownload(episode_id, season, episode):
-    try:
-        res = requests.post(f"{SONARR_URL}/command", headers=HEADERS, json={
-            "name": "EpisodeSearch",
-            "episodeIds": [episode_id]
-        })
-        res.raise_for_status()
-        logging.info(f"🔄 Redownload triggered for S{season:02}E{episode:02}")
-    except Exception as e:
-        logging.error(f"Failed to trigger redownload: {e}")
+def get_episode_file(episode_file_id):
+    resp = requests.get(f"{SONARR_URL}/api/v3/episodefile/{episode_file_id}", headers=HEADERS)
+    resp.raise_for_status()
+    return resp.json()
 
-def process_file(file_path):
-    logging.info(f"📺 Checking: {file_path}")
-    filename = Path(file_path).name
-    parent_folder = Path(file_path).parent.parent.name
+# --- Title extraction ---
+def extract_title_from_filename(name):
+    match = re.search(r"S\d{2}E\d{2} - (.+?) \[", name)
+    return match.group(1) if match else ""
 
-    tvdb_id_match = TVDB_ID_PATTERN.search(parent_folder)
-    episode_match = EPISODE_PATTERN.search(filename)
-    title_match = TITLE_IN_FILENAME.search(filename)
+def extract_title_from_scene_name(scene_name):
+    match = re.search(
+        r"S\d{2}E\d{2}\.([^.]+(?:\.[^.]+)*?)\.(?:\d{3,4}x\d{3,4}|\[|WEB|HDTV|NF|AMZN|DSNP|DD|DDP|x264|h264|h265|HEVC|AAC|EAC3|-)",
+        scene_name,
+        re.IGNORECASE
+    )
+    if match:
+        return match.group(1).replace(".", " ").strip()
+    return ""
 
-    if not (tvdb_id_match and episode_match and title_match):
-        logging.warning(f"Skipping due to missing metadata: {file_path}")
-        return
-
-    tvdb_id = tvdb_id_match.group(1)
-    season_number = int(episode_match.group(1))
-    episode_number = int(episode_match.group(2))
-    filename_title = title_match.group(1).strip()
-
+# --- Main Logic ---
+def compare_titles(tvdb_id, season, episode):
     series = get_series_by_tvdbid(tvdb_id)
     if not series:
-        logging.warning(f"No matching series found in Sonarr for tvdb-{tvdb_id}")
+        logging.error(f"Series with tvdbId {tvdb_id} not found.")
         return
 
-    expected_title, episode_id = get_episode_by_number(series["id"], season_number, episode_number)
-    if not expected_title:
-        logging.warning(f"Could not find episode title for S{season_number:02}E{episode_number:02}")
+    episode_info = get_episode(series["id"], season, episode)
+    if not episode_info:
+        logging.error(f"Episode S{season:02}E{episode:02} not found.")
         return
 
-    if normalize_title(filename_title) != normalize_title(expected_title):
-        logging.error(f"Title mismatch:")
-        logging.error(f"   Sonarr: '{expected_title}'")
-        logging.error(f"   File  : '{filename_title}'")
-        if AUTO_REDOWNLOAD and episode_id:
-            trigger_redownload(episode_id, season_number, episode_number)
-        elif not AUTO_REDOWNLOAD:
-            logging.info("AUTO_REDOWNLOAD is off. Not triggering redownload.")
+    if not episode_info.get("hasFile"):
+        logging.warning(f"Episode S{season:02}E{episode:02} has no file.")
+        return
+
+    episode_file = get_episode_file(episode_info["episodeFileId"])
+    scene_name = episode_file.get("sceneName")
+    relative_path = Path(episode_file.get("relativePath", "")).name
+    expected_title = episode_info.get("title")
+
+    title_from_filename = extract_title_from_filename(relative_path)
+    title_from_scene = extract_title_from_scene_name(scene_name or "")
+
+    logging.info(f"\n📺 {series['title']} S{season:02}E{episode:02}")
+    logging.info(f"🎯 Expected title : {expected_title}")
+    logging.info(f"📁 File title     : {title_from_filename}")
+    logging.info(f"🎞️  Scene title    : {title_from_scene or '[unknown]'}")
+
+    nf, ne, ns = map(normalize_title, [title_from_filename, expected_title, title_from_scene])
+
+    if nf != ne:
+        logging.error("File title does NOT match expected title.")
     else:
-        logging.info(f"✅ Title match: '{expected_title}'")
+        logging.info("File title matches expected title.")
 
-def walk_directory(watched_dir="/watched"):
-    for root, _, files in os.walk(watched_dir):
-        for name in files:
-            if name.endswith((".mkv", ".mp4", ".avi")):
-                process_file(os.path.join(root, name))
+    if ns and ns != ne:
+        logging.error("Scene title does NOT match expected title.")
+    elif ns:
+        logging.info("Scene title matches expected title.")
 
+# --- Entry Point ---
 if __name__ == "__main__":
-    walk_directory()
+    import sys
+    if len(sys.argv) != 4:
+        print("Usage: python compare_scene_vs_filename.py <tvdbId> <season> <episode>")
+        sys.exit(1)
+
+    if not SONARR_API_KEY:
+        logging.error("SONARR_API_KEY environment variable is not set.")
+        sys.exit(1)
+
+    tvdb_id = int(sys.argv[1])
+    season = int(sys.argv[2])
+    episode = int(sys.argv[3])
+
+    compare_titles(tvdb_id, season, episode)
