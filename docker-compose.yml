@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   sonarr-scanner:
-    build: .
+    image: dhclark18/tv-episode-checker:latest
     environment:
       SONARR_URL: http://192.168.1.71:8989
       SONARR_API_KEY: your-api-key
