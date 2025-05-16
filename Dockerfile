@@ -1,10 +1,11 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+COPY . /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir requests watchdog
 
-COPY checker.py watcher.py ./
+ENV LOG_PATH=/logs
+ENV WATCH_DIR=/watched
 
-ENTRYPOINT ["python", "checker.py"]
+CMD ["python", "watcher.py"]
