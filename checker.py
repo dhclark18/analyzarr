@@ -2,9 +2,10 @@
 import os
 import re
 import requests
+import unicodedata
 from pathlib import Path
 
-# Base config
+# Normalize and finalize config
 raw_url = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
 SONARR_URL = raw_url + "/api/v3" if not raw_url.endswith("/api/v3") else raw_url
 SONARR_API_KEY = os.getenv("SONARR_API_KEY")
@@ -19,7 +20,12 @@ HEADERS = {"X-Api-Key": SONARR_API_KEY}
 # Regex patterns
 EPISODE_PATTERN = re.compile(r"[Ss](\d{2})[Ee](\d{2})")
 TVDB_ID_PATTERN = re.compile(r"\{tvdb-(\d+)\}")
-TITLE_IN_FILENAME = re.compile(r"S\d{2}E\d{2} - (.+?) \[")  # Capture title before [
+TITLE_IN_FILENAME = re.compile(r"S\d{2}E\d{2} - (.+?) \[")
+
+def normalize_title(title):
+    """Normalize titles for comparison: remove punctuation, accents, spaces, and lowercase."""
+    title = unicodedata.normalize("NFKD", title)
+    return "".join(c for c in title if c.isalnum()).lower()
 
 def get_series_by_tvdbid(tvdbid):
     url = f"{SONARR_URL}/series"
@@ -57,7 +63,7 @@ def trigger_redownload(episode_id, season, episode):
         print(f"❌ Failed to trigger redownload: {e}")
 
 def process_file(file_path):
-    print(f"📺 Checking: {file_path}")
+    print(f"\n📺 Checking: {file_path}")
     filename = Path(file_path).name
     parent_folder = Path(file_path).parent.parent.name
 
@@ -84,8 +90,13 @@ def process_file(file_path):
         print(f"⚠️ Could not find episode title in Sonarr for S{season_number:02}E{episode_number:02}")
         return
 
-    if filename_title.lower() != expected_title.lower():
-        print(f"❌ Title mismatch:\n   Sonarr: '{expected_title}'\n   File  : '{filename_title}'")
+    normalized_file = normalize_title(filename_title)
+    normalized_expected = normalize_title(expected_title)
+
+    if normalized_file != normalized_expected:
+        print(f"❌ Title mismatch:")
+        print(f"   Sonarr: '{expected_title}'")
+        print(f"   File  : '{filename_title}'")
         if AUTO_REDOWNLOAD and episode_id:
             trigger_redownload(episode_id, season_number, episode_number)
         elif not AUTO_REDOWNLOAD:
