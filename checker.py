@@ -36,15 +36,44 @@ def extract_title_from_filename(name):
     match = re.search(r"S\d{2}E\d{2} - (.+?) \[", name)
     return match.group(1) if match else ""
 
-def extract_title_from_scene_name(scene_name):
-    match = re.search(
-        r"S\d{2}E\d{2}\.([^.]+(?:\.[^.]+)*?)\.(?:\d{3,4}x\d{3,4}|\[|WEB|HDTV|NF|AMZN|DSNP|DD|DDP|x264|h264|h265|HEVC|AAC|EAC3|-)",
-        scene_name,
-        re.IGNORECASE
-    )
-    if match:
-        return match.group(1).replace(".", " ").strip()
-    return ""
+def extract_episode_title(scene_name):
+    match = re.search(r'[sS]\d{2}[eE]\d{2}((?:\.[^.]+)+)', scene_name)
+    if not match:
+        return None
+
+    title_part = match.group(1)
+
+    stopwords = [
+        # Resolutions
+        '240p', '360p', '480p', '540p', '720p', '1080p', '1440p', '2160p', '4320p',
+        '4K', '8K',
+
+        # Streaming services
+        'NF', 'AMZN', 'HMAX', 'DSNP', 'ATVP', 'iT', 'iTunes', 'HULU', 'ParamountPlus', 'Peacock', 'MAX',
+
+        # Quality/source
+        'WEB', 'WEBRip', 'WEB-DL', 'BluRay', 'HDTV', 'DVDRip', 'CAM', 'TS', 'DVDScr',
+
+        # Codecs/audio
+        'H264', 'H265', 'x264', 'x265', 'XviD', 'DivX',
+        'DD2.0', 'DD5.1', 'DDP5.1', 'AAC', 'MP3', 'FLAC',
+        'TRUEHD', 'DTS', 'Atmos', 'EAC3',
+
+        # Scene tags
+        'REPACK', 'PROPER', 'EXTENDED', 'INTERNAL', 'REMUX', 'LIMITED', 'UNRATED', 'MULTi',
+
+        # Group naming extras
+        'RARBG', 'FGT', 'NTG', 'XEBEC', 'mSD', 'YIFY', 'PSA', 'ION10'
+    ]
+
+    parts = title_part.strip('.').split('.')
+    title_words = []
+    for word in parts:
+        if word.upper() in (w.upper() for w in stopwords):
+            break
+        title_words.append(word)
+
+    return ' '.join(title_words).strip()
 
 # --- API ---
 def get_series_list():
