@@ -36,25 +36,6 @@ def extract_title_from_filename(name):
     match = re.search(r"S\d{2}E\d{2} - (.+?) \[", name)
     return match.group(1) if match else ""
 
-def extract_title_from_scene_name(scene_name):
-    if not scene_name:
-        return ""
-
-    # Remove common tags and trailing metadata
-    cleaned = re.sub(
-        r"\.(2160p|1080p|720p|480p|WEB[-\.]DL|WEB|HDTV|NF|AMZN|DSNP|HMAX|HULU|HBO|AAC(?:2\.0|5\.1)?|DD(?:P)?(?:5\.1)?|EAC3|x264|h264|h265|HEVC|XVID|PROPER|REPACK|INTERNAL|EXTENDED|READNFO|UNRATED)(\.|$).*",
-        "",
-        scene_name,
-        flags=re.IGNORECASE
-    )
-
-    # Extract the title part after SxxExx
-    match = re.search(r"S\d{2}E\d{2}\.([^.]+(?:\.[^.]+)*)", cleaned, re.IGNORECASE)
-    if match:
-        return match.group(1).replace(".", " ").strip()
-
-    return ""
-
 # --- API ---
 def get_series_list():
     resp = requests.get(f"{SONARR_URL}/api/v3/series", headers=HEADERS)
@@ -87,26 +68,31 @@ def check_episode(series, episode):
     scene_name = epfile.get("sceneName")
 
     file_title = extract_title_from_filename(filename)
-    scene_title = extract_title_from_scene_name(scene_name or "")
 
-    nf, ne, ns = map(normalize_title, [file_title, expected_title, scene_title])
+    # Normalize titles
+    nf = normalize_title(file_title)
+    ne = normalize_title(expected_title)
+    ns = normalize_title(scene_name or "")
 
     episode_code = f"S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}"
     logging.info(f"\n📺 {series['title']} {episode_code}")
     logging.info(f"🎯 Expected title : {expected_title}")
     logging.info(f"📁 File title     : {file_title}")
-    logging.info(f"🎞️  Scene title    : {scene_title or '[unknown]'}")
+    logging.info(f"🎞️  Scene name     : {scene_name or '[unknown]'}")
 
+    # Compare file title
     if nf != ne:
         logging.error("❌ File title does NOT match expected title.")
     else:
         logging.info("✅ File title matches expected title.")
 
-    if scene_title:
-        if ns != ne:
-            logging.error("❌ Scene title does NOT match expected title.")
-        else:
-            logging.info("✅ Scene title matches expected title.")
+    # Compare normalized scene string
+    if not ns:
+        logging.warning("⚠️  Scene name is missing.")
+    elif ne in ns or nf in ns:
+        logging.info("✅ Scene name contains expected or file title.")
+    else:
+        logging.error("❌ Scene name does NOT contain expected or file title.")
 
 # --- Entry Point ---
 def scan_library():
