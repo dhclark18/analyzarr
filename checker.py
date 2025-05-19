@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import requests
 from pathlib import Path
 import unicodedata
@@ -9,7 +10,6 @@ import logging
 LOG_DIR = os.getenv("LOG_PATH", "/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "scene_check.log")
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -24,6 +24,22 @@ SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
 SONARR_API_KEY = os.getenv("SONARR_API_KEY")
 HEADERS = {"X-Api-Key": SONARR_API_KEY}
 
+MAX_MISMATCH_THRESHOLD = int(os.getenv("MAX_MISMATCH_THRESHOLD", 10))
+MISMATCH_DB_PATH = os.getenv("MISMATCH_DB_PATH", "/data/mismatch_counts.json")
+LIMIT_SERIES_TVDBID = os.getenv("LIMIT_SERIES_TVDBID")
+DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
+
+
+if os.path.exists(MISMATCH_DB_PATH):
+    with open(MISMATCH_DB_PATH, "r") as f:
+        mismatch_db = json.load(f)
+else:
+    mismatch_db = {}
+
+def save_mismatch_db():
+    with open(MISMATCH_DB_PATH, "w") as f:
+        json.dump(mismatch_db, f)
+
 # --- Helpers ---
 def normalize_title(title):
     if not title:
@@ -32,11 +48,7 @@ def normalize_title(title):
     title = unicodedata.normalize("NFKD", title)
     return "".join(c for c in title if c.isalnum()).lower()
 
-def extract_title_from_filename(name):
-    match = re.search(r"S\d{2}E\d{2} - (.+?) \[", name)
-    return match.group(1) if match else ""
-
-# --- API ---
+# --- API Access ---
 def get_series_list():
     resp = requests.get(f"{SONARR_URL}/api/v3/series", headers=HEADERS)
     resp.raise_for_status()
@@ -52,7 +64,7 @@ def get_episode_file(file_id):
     resp.raise_for_status()
     return resp.json()
 
-# --- Main Checker ---
+# --- Main Check ---
 def check_episode(series, episode):
     if not episode.get("hasFile") or not episode.get("episodeFileId"):
         return
@@ -64,35 +76,47 @@ def check_episode(series, episode):
         return
 
     expected_title = episode.get("title")
-    filename = Path(epfile.get("relativePath", "")).name
     scene_name = epfile.get("sceneName")
+    episode_code = f"S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}"
+    episode_key = f"{series['tvdbId']}_{episode_code}"
+    mismatch_count = mismatch_db.get(episode_key, 0)
 
-    file_title = extract_title_from_filename(filename)
+    logging.info(f"\n📺 {series['title']} {episode_code}")
+    logging.info(f"🎯 Expected title : {expected_title}")
+    logging.info(f"🎞️  Scene title    : {scene_name or '[unknown]'}")
 
-    # Normalize titles
-    nf = normalize_title(file_title)
+    if mismatch_count >= MAX_MISMATCH_THRESHOLD:
+        logging.warning(f"⚠️  Mismatch threshold reached ({mismatch_count}) — skipping.")
+        return
+
     ne = normalize_title(expected_title)
     ns = normalize_title(scene_name or "")
 
-    episode_code = f"S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}"
-    logging.info(f"\n📺 {series['title']} {episode_code}")
-    logging.info(f"🎯 Expected title : {expected_title}")
-    logging.info(f"📁 File title     : {file_title}")
-    logging.info(f"🎞️  Scene name     : {scene_name or '[unknown]'}")
+    if ne not in ns:
+    logging.error("❌ Scene title does NOT match expected title.")
+    mismatch_count += 1
+    mismatch_db[episode_key] = mismatch_count
+    save_mismatch_db()
 
-    # Compare file title
-    if nf != ne:
-        logging.error("❌ File title does NOT match expected title.")
+    if DRY_RUN:
+        logging.warning("🧪 DRY RUN: Would delete mismatched file.")
     else:
-        logging.info("✅ File title matches expected title.")
+        try:
+            os.remove(epfile.get("path"))
+            logging.warning("🗑️  Deleted mismatched file.")
+        except Exception as e:
+            logging.error(f"Failed to delete file: {e}")
 
-    # Compare normalized scene string
-    if not ns:
-        logging.warning("⚠️  Scene name is missing.")
-    elif ne in ns or nf in ns:
-        logging.info("✅ Scene name contains expected or file title.")
+    if DRY_RUN:
+        logging.info("🧪 DRY RUN: Would trigger Sonarr rescan/refresh/search.")
     else:
-        logging.error("❌ Scene name does NOT contain expected or file title.")
+        try:
+            requests.post(f"{SONARR_URL}/api/v3/command", headers=HEADERS, json={"name": "RescanSeries", "seriesId": series["id"]})
+            requests.post(f"{SONARR_URL}/api/v3/command", headers=HEADERS, json={"name": "RefreshSeries", "seriesId": series["id"]})
+            requests.post(f"{SONARR_URL}/api/v3/command", headers=HEADERS, json={"name": "EpisodeSearch", "episodeIds": [episode["id"]]})
+            logging.info("🔁 Triggered rescan, refresh, and episode search.")
+        except Exception as e:
+            logging.error(f"Failed to trigger Sonarr commands: {e}")
 
 # --- Entry Point ---
 def scan_library():
@@ -103,6 +127,9 @@ def scan_library():
     try:
         all_series = get_series_list()
         for series in all_series:
+            if LIMIT_SERIES_TVDBID and str(series["tvdbId"]) != LIMIT_SERIES_TVDBID:
+                continue
+
             logging.info(f"\n=== Scanning: {series['title']} ===")
             episodes = get_episodes(series["id"])
             for episode in episodes:
@@ -112,3 +139,4 @@ def scan_library():
 
 if __name__ == "__main__":
     scan_library()
+
