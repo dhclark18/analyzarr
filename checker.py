@@ -32,9 +32,9 @@ SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 
 # --- DB ---
 def should_ignore_episode_file(episode_file_id):
-    logger.debug(f"🔍 LOG: should_ignore_episode_file() called for episode_file_id={episode_file_id}")
+    logging.debug(f"🔍 LOG: should_ignore_episode_file() called for episode_file_id={episode_file_id}")
     if not DATABASE_URL:
-        logger.warning("🔍 LOG: DATABASE_URL not set; skipping ignore check")
+        logging.warning("🔍 LOG: DATABASE_URL not set; skipping ignore check")
         return False
 
     # 1) Connect with a timeout and measure duration
@@ -42,9 +42,9 @@ def should_ignore_episode_file(episode_file_id):
         start = datetime.utcnow()
         conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
         elapsed = (datetime.utcnow() - start).total_seconds()
-        logger.debug(f"🔍 LOG: DB connected in {elapsed:.3f}s")
+        logging.debug(f"🔍 LOG: DB connected in {elapsed:.3f}s")
     except Exception as e:
-        logger.error(f"🔍 LOG: DB connection failed for ignore check: {e}")
+        logging.error(f"🔍 LOG: DB connection failed for ignore check: {e}")
         return False
 
     # 2) Run the tag lookup and log exactly what comes back
@@ -61,13 +61,13 @@ def should_ignore_episode_file(episode_file_id):
             (episode_file_id, SPECIAL_TAG_NAME)
         )
         rows = cur.fetchall()
-        logger.debug(f"🔍 LOG: Tag lookup returned {len(rows)} row(s): {rows}")
+        logging.debug(f"🔍 LOG: Tag lookup returned {len(rows)} row(s): {rows}")
         cur.close()
         conn.close()
         return len(rows) > 0
 
     except Exception as e:
-        logger.error(f"🔍 LOG: DB tag check error for episode_file_id={episode_file_id}: {e}")
+        logging.error(f"🔍 LOG: DB tag check error for episode_file_id={episode_file_id}: {e}")
         try:
             conn.close()
         except:
