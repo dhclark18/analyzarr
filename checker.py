@@ -5,6 +5,7 @@ import logging
 import unicodedata
 import psycopg2
 from pathlib import Path
+from datetime import datetime
 
 # --- Logging Setup ---
 LOG_DIR = os.getenv("LOG_PATH", "/logs")
@@ -31,23 +32,46 @@ SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 
 # --- DB ---
 def should_ignore_episode_file(episode_file_id):
+    logger.debug(f"🔍 LOG: should_ignore_episode_file() called for episode_file_id={episode_file_id}")
     if not DATABASE_URL:
+        logger.warning("🔍 LOG: DATABASE_URL not set; skipping ignore check")
         return False
+
+    # 1) Connect with a timeout and measure duration
     try:
-        conn = psycopg2.connect(DATABASE_URL)
+        start = datetime.utcnow()
+        conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
+        elapsed = (datetime.utcnow() - start).total_seconds()
+        logger.debug(f"🔍 LOG: DB connected in {elapsed:.3f}s")
+    except Exception as e:
+        logger.error(f"🔍 LOG: DB connection failed for ignore check: {e}")
+        return False
+
+    # 2) Run the tag lookup and log exactly what comes back
+    try:
         cur = conn.cursor()
-        cur.execute("""
-            SELECT 1
+        cur.execute(
+            """
+            SELECT et.episode_file_id, t.id AS tag_id, t.name
             FROM episode_tags et
             JOIN tags t ON et.tag_id = t.id
-            WHERE et.episode_file_id = %s AND t.name = %s
-        """, (episode_file_id, SPECIAL_TAG_NAME))
-        result = cur.fetchone()
+            WHERE et.episode_file_id = %s
+              AND t.name = %s
+            """,
+            (episode_file_id, SPECIAL_TAG_NAME)
+        )
+        rows = cur.fetchall()
+        logger.debug(f"🔍 LOG: Tag lookup returned {len(rows)} row(s): {rows}")
         cur.close()
         conn.close()
-        return result is not None
+        return len(rows) > 0
+
     except Exception as e:
-        logging.error(f"DB tag check error for episode_file_id {episode_file_id}: {e}")
+        logger.error(f"🔍 LOG: DB tag check error for episode_file_id={episode_file_id}: {e}")
+        try:
+            conn.close()
+        except:
+            pass
         return False
 
 # --- Helpers ---
