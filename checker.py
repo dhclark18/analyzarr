@@ -32,46 +32,48 @@ SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 
 # --- DB ---
 def should_ignore_episode_file(episode_file_id):
-    logging.info(f"🔍 LOG: should_ignore_episode_file() called for episode_file_id={episode_file_id}")
+    logger.debug(f"🔍 IGNORE-CHECK start for episode_file_id={episode_file_id}")
     if not DATABASE_URL:
-        logging.error("🔍 LOG: DATABASE_URL not set; skipping ignore check")
+        logger.warning("🔍 IGNORE-CHECK: DATABASE_URL not set")
         return False
 
-    # 1) Connect with a timeout and measure duration
     try:
-        start = datetime.utcnow()
         conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
-        elapsed = (datetime.utcnow() - start).total_seconds()
-        logging.info(f"🔍 LOG: DB connected in {elapsed:.3f}s")
+        logger.debug("🔍 IGNORE-CHECK: DB connected")
     except Exception as e:
-        logging.error(f"🔍 LOG: DB connection failed for ignore check: {e}")
+        logger.error(f"🔍 IGNORE-CHECK: DB connect failed: {e}")
         return False
 
-    # 2) Run the tag lookup and log exactly what comes back
     try:
         cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT et.episode_file_id, t.id AS tag_id, t.name
-            FROM episode_tags et
-            JOIN tags t ON et.tag_id = t.id
-            WHERE et.episode_file_id = %s
-              AND t.name = %s
-            """,
-            (episode_file_id, SPECIAL_TAG_NAME)
-        )
-        rows = cur.fetchall()
-        logging.info(f"🔍 LOG: Tag lookup returned {len(rows)} row(s): {rows}")
+        # Dump all tags for this file
+        cur.execute("""
+            SELECT et.episode_file_id, et.tag_id, t.name
+              FROM episode_tags et
+              JOIN tags t ON et.tag_id = t.id
+             WHERE et.episode_file_id = %s
+        """, (episode_file_id,))
+        all_rows = cur.fetchall()
+        logger.debug(f"🔍 IGNORE-CHECK: All tags on this file: {all_rows}")
+
+        # Now specifically look for the special tag
+        cur.execute("""
+            SELECT 1
+              FROM episode_tags et
+              JOIN tags t ON et.tag_id = t.id
+             WHERE et.episode_file_id = %s
+               AND t.name = %s
+        """, (episode_file_id, SPECIAL_TAG_NAME))
+        found = cur.fetchone() is not None
+        logger.debug(f"🔍 IGNORE-CHECK: Found '{SPECIAL_TAG_NAME}'? {found}")
+
         cur.close()
         conn.close()
-        return len(rows) > 0
+        return found
 
     except Exception as e:
-        logging.error(f"🔍 LOG: DB tag check error for episode_file_id={episode_file_id}: {e}")
-        try:
-            conn.close()
-        except:
-            pass
+        logger.error(f"🔍 IGNORE-CHECK: query error: {e}")
+        conn.close()
         return False
 
 # --- Helpers ---
