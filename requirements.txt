@@ -1,2 +1,2 @@
-requests
-watchdog
+requests>=2.25.1
+psycopg2-binary>=2.8
