@@ -190,6 +190,23 @@ def check_episode(series, episode):
     delete_file(epfile["id"])
     refresh_series(series["id"])
     search_episode(episode["id"])
+    
+def scan_library():
+    if not SONARR_API_KEY:
+        logging.error("❌ SONARR_API_KEY is not set.")
+        return
 
+    try:
+        series_list = get_series_list()
+        for series in series_list:
+            if TVDB_FILTER and str(series.get("tvdbId")) != TVDB_FILTER:
+                continue
+            logging.info(f"\n=== Scanning: {series['title']} ===")
+            episodes = get_episodes(series["id"])
+            for episode in episodes:
+                check_episode(series, episode)
+    except Exception as e:
+        logging.error(f"Library scan failed: {e}")
+        
 if __name__ == "__main__":
     scan_library()
