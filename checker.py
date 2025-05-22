@@ -29,7 +29,7 @@ TVDB_FILTER = os.getenv("TVDB_ID")
 FORCE_RUN = os.getenv("FR_RUN", "false").lower() == "true"
 DATABASE_URL = os.getenv("DATABASE_URL")
 SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
-
+MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "10"))
 # --- DB ---
 def db_execute(sql, params=None, fetch=False):
     with db_connect() as conn, conn.cursor() as cur:
