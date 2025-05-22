@@ -31,6 +31,13 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 
 # --- DB ---
+def db_execute(sql, params=None, fetch=False):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(sql, params or ())
+        if fetch:
+            return cur.fetchall()
+        conn.commit()
+        
 def init_db():
     db_execute("""
     CREATE TABLE IF NOT EXISTS mismatch_tracking (
