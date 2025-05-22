@@ -139,11 +139,14 @@ def check_episode(series, episode):
     season   = episode["seasonNumber"]
     epnum    = episode["episodeNumber"]
     code     = f"S{season:02}E{epnum:02}"
-
+    series_title = normalize_title(series[\"title\"])
+    key = f"{actual}:{season:02d}:{epnum:02d}"
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected title : {episode['title']}")
     logging.info(f"🎞️  Scene name     : {scene_name}")
-
+    
+    init_db()
+    
     # 4) If it matches, nothing else to do
     if expected in actual:
         logging.info(f"✅ Scene title matches for {series['title']} {code}")
@@ -187,5 +190,4 @@ def scan_library():
         logging.error(f"Library scan failed: {e}")
 
 if __name__ == "__main__":
-    init_db()
     scan_library()
