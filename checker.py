@@ -175,12 +175,7 @@ def check_episode(series, episode):
         )
         return
 
-    # 6) Check for special‐tag ignore
-    if should_ignore_episode_file(epfile["id"]):
-        logging.info("⏩ Ignored due to special tag.")
-        return
-
-    # 7) Legitimate mismatch under threshold → proceed
+    # 6) Legitimate mismatch under threshold → proceed
     logging.error(f"❌ Scene title does NOT match expected title for {series['title']} {code}")
 
     if not FORCE_RUN:
