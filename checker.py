@@ -28,7 +28,7 @@ SONARR_HEADERS = {"X-Api-Key": SONARR_API_KEY}
 TVDB_FILTER = os.getenv("TVDB_ID")
 FORCE_RUN = os.getenv("FR_RUN", "false").lower() == "true"
 DATABASE_URL = os.getenv("DATABASE_URL")
-SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
+#SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "10"))
 # --- DB ---
 def db_execute(sql, params=None, fetch=False):
@@ -147,15 +147,13 @@ def check_episode(series, episode):
         return
 
     # 3) Normalize titles and build the key
-    expected = normalize_title(episode["title"])
-    actual   = normalize_title(scene_name)
-    season   = episode["seasonNumber"]
-    epnum    = episode["episodeNumber"]
-    code     = f"S{season:02}E{epnum:02}"
-
-    # key uses normalized series title plus season/episode
+    expected    = normalize_title(episode["title"])
+    actual      = normalize_title(scene_name)
+    season      = episode["seasonNumber"]
+    epnum       = episode["episodeNumber"]
+    code        = f"S{season:02}E{epnum:02}"
     series_norm = normalize_title(series["title"])
-    key = f"{series_norm}:{season:02d}:{epnum:02d}"
+    key         = f"series::{series_norm}::S{season:02d}E{epnum:02d}"
 
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected title : {episode['title']}")
@@ -166,7 +164,7 @@ def check_episode(series, episode):
         logging.info(f"✅ Scene title matches for {series['title']} {code}")
         return
 
-    # 5) Read the stored count; if over threshold, ignore
+    # 5) Read stored count; if over threshold, ignore
     current_count = get_mismatch_count(key)
     if current_count >= MISMATCH_THRESHOLD:
         logging.info(
