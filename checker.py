@@ -60,24 +60,23 @@ def db_execute(sql, params=None, fetch=False):
             return cur.fetchall()
         conn.commit()
         
-def has_exceeded_threshold(series_title: str, season: int, episode_num: int) -> bool:
+def get_mismatch_count(key: str) -> int:
     """
-    Return True if the stored mismatch count for this episode key exceeds MISMATCH_THRESHOLD.
-    Does not modify the database.
+    Return the stored mismatch count for this key, or 0 if none.
     """
-    key = f"series::{normalize_title(series_title)}::S{season:02}E{episode_num:02}"
     try:
-        with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
+        conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
+        with conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT count FROM mismatch_tracking WHERE key = %s",
                     (key,)
                 )
                 row = cur.fetchone()
-        return bool(row and row[0] > MISMATCH_THRESHOLD)
+        return row[0] if row else 0
     except Exception as e:
-        logging.error(f"DB error checking threshold for {key}: {e}")
-        return False
+        logging.error(f"DB error fetching mismatch count for {key}: {e}")
+        return 0
 # --- Helpers ---
 def normalize_title(text):
     if not text:
@@ -146,61 +145,50 @@ def check_episode(series, episode):
         logging.warning(f"⚠️ Missing scene name for episode file {epfile.get('id')}")
         return
 
-    # 3) Normalize titles
+    # 3) Normalize titles and build the key
     expected = normalize_title(episode["title"])
     actual   = normalize_title(scene_name)
     season   = episode["seasonNumber"]
     epnum    = episode["episodeNumber"]
     code     = f"S{season:02}E{epnum:02}"
-    series_title = normalize_title(series["title"])
-    key = f"{series_title}:{season:02d}:{epnum:02d}"
+
+    # key uses normalized series title plus season/episode
+    series_norm = normalize_title(series["title"])
+    key = f"{series_norm}:{season:02d}:{epnum:02d}"
+
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected title : {episode['title']}")
     logging.info(f"🎞️  Scene name     : {scene_name}")
-    
-    init_db()
-    
+
     # 4) If it matches, nothing else to do
     if expected in actual:
         logging.info(f"✅ Scene title matches for {series['title']} {code}")
         return
 
-    # 5) On mismatch, first check DB threshold
-    if has_exceeded_threshold(series["title"], season, epnum):
+    # 5) Read the stored count; if over threshold, ignore
+    current_count = get_mismatch_count(key)
+    if current_count >= MISMATCH_THRESHOLD:
         logging.info(
             f"⏩ Ignoring mismatch for {series['title']} {code} "
-            f"(exceeded {MISMATCH_THRESHOLD} stored mismatches)"
+            f"(count={current_count} ≥ {MISMATCH_THRESHOLD})"
         )
         return
 
-    # 6) Finally, treat it as a “real” mismatch
+    # 6) Check for special‐tag ignore
+    if should_ignore_episode_file(epfile["id"]):
+        logging.info("⏩ Ignored due to special tag.")
+        return
+
+    # 7) Legitimate mismatch under threshold → proceed
     logging.error(f"❌ Scene title does NOT match expected title for {series['title']} {code}")
 
     if not FORCE_RUN:
         logging.info("Skipping automatic deletion/search (not in force run mode).")
         return
 
-    # 7) Your force‐run actions
     delete_file(epfile["id"])
     refresh_series(series["id"])
     search_episode(episode["id"])
-
-def scan_library():
-    if not SONARR_API_KEY:
-        logging.error("❌ SONARR_API_KEY is not set.")
-        return
-
-    try:
-        series_list = get_series_list()
-        for series in series_list:
-            if TVDB_FILTER and str(series.get("tvdbId")) != TVDB_FILTER:
-                continue
-            logging.info(f"\n=== Scanning: {series['title']} ===")
-            episodes = get_episodes(series["id"])
-            for episode in episodes:
-                check_episode(series, episode)
-    except Exception as e:
-        logging.error(f"Library scan failed: {e}")
 
 if __name__ == "__main__":
     scan_library()
