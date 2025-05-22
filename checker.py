@@ -52,13 +52,6 @@ def db_connect():
         raise RuntimeError("DATABASE_URL not set")
     return psycopg2.connect(DATABASE_URL, connect_timeout=5)
     logger.info(f"🔍 LOG: DB connection established")
-
-def db_execute(sql, params=None, fetch=False):
-    with db_connect() as conn, conn.cursor() as cur:
-        cur.execute(sql, params or ())
-        if fetch:
-            return cur.fetchall()
-        conn.commit()
         
 def get_mismatch_count(key: str) -> int:
     """
@@ -143,17 +136,24 @@ def check_episode(series, episode):
 
     scene_name = epfile.get("sceneName")
     if not scene_name:
-        logging.warning(f"⚠️ Missing scene name for episode file {epfile.get('id')}")
+        logging.warning(f"⚠️ Missing scene name for file {epfile.get('id')}")
         return
 
-    # 3) Normalize titles and build the key
-    expected    = normalize_title(episode["title"])
-    actual      = normalize_title(scene_name)
-    season      = episode["seasonNumber"]
-    epnum       = episode["episodeNumber"]
+    # 3) Pull season/episode from file metadata (fallback to episode obj)
+    if epfile.get("episodes"):
+        first = epfile["episodes"][0]
+        season = first.get("seasonNumber", episode["seasonNumber"])
+        epnum  = first.get("episodeNumber", episode["episodeNumber"])
+    else:
+        season = episode["seasonNumber"]
+        epnum  = episode["episodeNumber"]
+
     code        = f"S{season:02}E{epnum:02}"
     series_norm = normalize_title(series["title"])
     key         = f"series::{series_norm}::S{season:02d}E{epnum:02d}"
+
+    expected = normalize_title(episode["title"])
+    actual   = normalize_title(scene_name)
 
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected title : {episode['title']}")
