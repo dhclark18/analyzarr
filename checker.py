@@ -46,7 +46,19 @@ def init_db():
       last_mismatch TIMESTAMP
     );
     """)
-    
+def db_connect():
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL not set")
+    return psycopg2.connect(DATABASE_URL, connect_timeout=5)
+    logger.info(f"🔍 LOG: DB connection established")
+
+def db_execute(sql, params=None, fetch=False):
+    with db_connect() as conn, conn.cursor() as cur:
+        cur.execute(sql, params or ())
+        if fetch:
+            return cur.fetchall()
+        conn.commit()
+        
 def has_exceeded_threshold(series_title: str, season: int, episode_num: int) -> bool:
     """
     Return True if the stored mismatch count for this episode key exceeds MISMATCH_THRESHOLD.
