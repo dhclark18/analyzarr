@@ -31,51 +31,24 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 
 # --- DB ---
-def should_ignore_episode_file(episode_file_id):
-    logging.debug(f"🔍 IGNORE-CHECK start for episode_file_id={episode_file_id}")
-    if not DATABASE_URL:
-        logging.warning("🔍 IGNORE-CHECK: DATABASE_URL not set")
-        return False
-
+def has_exceeded_threshold(series_title: str, season: int, episode_num: int) -> bool:
+    """
+    Return True if the stored mismatch count for this episode key exceeds MISMATCH_THRESHOLD.
+    Does not modify the database.
+    """
+    key = f"series::{normalize_title(series_title)}::S{season:02}E{episode_num:02}"
     try:
-        conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
-        logging.debug("🔍 IGNORE-CHECK: DB connected")
+        with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT count FROM mismatch_tracking WHERE key = %s",
+                    (key,)
+                )
+                row = cur.fetchone()
+        return bool(row and row[0] > MISMATCH_THRESHOLD)
     except Exception as e:
-        logging.error(f"🔍 IGNORE-CHECK: DB connect failed: {e}")
+        logging.error(f"DB error checking threshold for {key}: {e}")
         return False
-
-    try:
-        cur = conn.cursor()
-        # Dump all tags for this file
-        cur.execute("""
-            SELECT et.episode_file_id, et.tag_id, t.name
-              FROM episode_tags et
-              JOIN tags t ON et.tag_id = t.id
-             WHERE et.episode_file_id = %s
-        """, (episode_file_id,))
-        all_rows = cur.fetchall()
-        logging.debug(f"🔍 IGNORE-CHECK: All tags on this file: {all_rows}")
-
-        # Now specifically look for the special tag
-        cur.execute("""
-            SELECT 1
-              FROM episode_tags et
-              JOIN tags t ON et.tag_id = t.id
-             WHERE et.episode_file_id = %s
-               AND t.name = %s
-        """, (episode_file_id, SPECIAL_TAG_NAME))
-        found = cur.fetchone() is not None
-        logging.debug(f"🔍 IGNORE-CHECK: Found '{SPECIAL_TAG_NAME}'? {found}")
-
-        cur.close()
-        conn.close()
-        return found
-
-    except Exception as e:
-        logging.error(f"🔍 IGNORE-CHECK: query error: {e}")
-        conn.close()
-        return False
-
 # --- Helpers ---
 def normalize_title(text):
     if not text:
@@ -125,13 +98,18 @@ def search_episode(episode_id):
 
 # --- Main Logic ---
 def check_episode(series, episode):
+    # 1) Skip if there’s no file
     if not episode.get("hasFile") or not episode.get("episodeFileId"):
         return
 
+    # 2) Fetch the file metadata
     try:
         epfile = get_episode_file(episode["episodeFileId"])
     except Exception as e:
-        logging.error(f"❌ Could not fetch episode file for {series['title']} S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}: {e}")
+        logging.error(
+            f"❌ Could not fetch episode file for "
+            f"{series['title']} S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}: {e}"
+        )
         return
 
     scene_name = epfile.get("sceneName")
@@ -139,30 +117,41 @@ def check_episode(series, episode):
         logging.warning(f"⚠️ Missing scene name for episode file {epfile.get('id')}")
         return
 
+    # 3) Normalize titles
     expected = normalize_title(episode["title"])
-    scene = normalize_title(scene_name)
+    actual   = normalize_title(scene_name)
+    season   = episode["seasonNumber"]
+    epnum    = episode["episodeNumber"]
+    code     = f"S{season:02}E{epnum:02}"
 
-    episode_code = f"S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}"
-    logging.info(f"\n📺 {series['title']} {episode_code}")
+    logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected title : {episode['title']}")
     logging.info(f"🎞️  Scene name     : {scene_name}")
 
-    if expected not in scene:
-        if should_ignore_episode_file(epfile["id"]):
-            logging.info("⏩ Ignored due to special tag.")
-            return
+    # 4) If it matches, nothing else to do
+    if expected in actual:
+        logging.info(f"✅ Scene title matches for {series['title']} {code}")
+        return
 
-        logging.error("❌ Scene title does NOT match expected title.")
+    # 5) On mismatch, first check DB threshold
+    if has_exceeded_threshold(series["title"], season, epnum):
+        logging.info(
+            f"⏩ Ignoring mismatch for {series['title']} {code} "
+            f"(exceeded {MISMATCH_THRESHOLD} stored mismatches)"
+        )
+        return
 
-        if not FORCE_RUN:
-            logging.info("Skipping automatic deletion/search (not in force run mode).")
-            return
+    # 6) Finally, treat it as a “real” mismatch
+    logging.error(f"❌ Scene title does NOT match expected title for {series['title']} {code}")
 
-        delete_file(epfile["id"])
-        refresh_series(series["id"])
-        search_episode(episode["id"])
-    else:
-        logging.info("✅ Scene title matches expected title.")
+    if not FORCE_RUN:
+        logging.info("Skipping automatic deletion/search (not in force run mode).")
+        return
+
+    # 7) Your force‐run actions
+    delete_file(epfile["id"])
+    refresh_series(series["id"])
+    search_episode(episode["id"])
 
 def scan_library():
     if not SONARR_API_KEY:
