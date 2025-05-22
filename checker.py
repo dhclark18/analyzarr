@@ -139,8 +139,8 @@ def check_episode(series, episode):
     season   = episode["seasonNumber"]
     epnum    = episode["episodeNumber"]
     code     = f"S{season:02}E{epnum:02}"
-    series_title = normalize_title(series[\"title\"])
-    key = f"{actual}:{season:02d}:{epnum:02d}"
+    series_title = normalize_title(series["title"])
+    key = f"{series_title}:{season:02d}:{epnum:02d}"
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected title : {episode['title']}")
     logging.info(f"🎞️  Scene name     : {scene_name}")
