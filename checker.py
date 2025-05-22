@@ -12,7 +12,7 @@ LOG_DIR = os.getenv("LOG_PATH", "/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "scene_check.log")
 
-logger.basicConfig(
+logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
@@ -32,16 +32,16 @@ SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 
 # --- DB ---
 def should_ignore_episode_file(episode_file_id):
-    logger.debug(f"🔍 IGNORE-CHECK start for episode_file_id={episode_file_id}")
+    logging.debug(f"🔍 IGNORE-CHECK start for episode_file_id={episode_file_id}")
     if not DATABASE_URL:
-        logger.warning("🔍 IGNORE-CHECK: DATABASE_URL not set")
+        logging.warning("🔍 IGNORE-CHECK: DATABASE_URL not set")
         return False
 
     try:
         conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
-        logger.debug("🔍 IGNORE-CHECK: DB connected")
+        logging.debug("🔍 IGNORE-CHECK: DB connected")
     except Exception as e:
-        logger.error(f"🔍 IGNORE-CHECK: DB connect failed: {e}")
+        logging.error(f"🔍 IGNORE-CHECK: DB connect failed: {e}")
         return False
 
     try:
@@ -54,7 +54,7 @@ def should_ignore_episode_file(episode_file_id):
              WHERE et.episode_file_id = %s
         """, (episode_file_id,))
         all_rows = cur.fetchall()
-        logger.debug(f"🔍 IGNORE-CHECK: All tags on this file: {all_rows}")
+        logging.debug(f"🔍 IGNORE-CHECK: All tags on this file: {all_rows}")
 
         # Now specifically look for the special tag
         cur.execute("""
@@ -65,14 +65,14 @@ def should_ignore_episode_file(episode_file_id):
                AND t.name = %s
         """, (episode_file_id, SPECIAL_TAG_NAME))
         found = cur.fetchone() is not None
-        logger.debug(f"🔍 IGNORE-CHECK: Found '{SPECIAL_TAG_NAME}'? {found}")
+        logging.debug(f"🔍 IGNORE-CHECK: Found '{SPECIAL_TAG_NAME}'? {found}")
 
         cur.close()
         conn.close()
         return found
 
     except Exception as e:
-        logger.error(f"🔍 IGNORE-CHECK: query error: {e}")
+        logging.error(f"🔍 IGNORE-CHECK: query error: {e}")
         conn.close()
         return False
 
