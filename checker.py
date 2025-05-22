@@ -77,6 +77,7 @@ def get_mismatch_count(key: str) -> int:
     except Exception as e:
         logging.error(f"DB error fetching mismatch count for {key}: {e}")
         return 0
+        
 # --- Helpers ---
 def normalize_title(text):
     if not text:
