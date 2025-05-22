@@ -28,17 +28,22 @@ SONARR_HEADERS     = {"X-Api-Key": SONARR_API_KEY}
 TVDB_FILTER        = os.getenv("TVDB_ID")
 FORCE_RUN          = os.getenv("FR_RUN", "false").lower() == "true"
 DATABASE_URL       = os.getenv("DATABASE_URL")
-SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic_title")
+SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "10"))
+
+# Optional season filter: comma-sep list of ints, or empty/None to disable
+_raw = os.getenv("SEASON_FILTER")
+if _raw:
+    try:
+        SEASON_FILTER = [int(x.strip()) for x in _raw.split(",")]
+    except ValueError:
+        logging.warning(f"Invalid SEASON_FILTER '{_raw}', ignoring.")
+        SEASON_FILTER = None
+else:
+    SEASON_FILTER = None
 
 # --- DB Init & Tag Helpers ---
 def init_db():
-    """
-    Create tables if they don't exist:
-     - mismatch_tracking: holds keys and counts (populated by your other script)
-     - tags: master list of tag names
-     - episode_tags: join table episode_file_id ↔ tag_id
-    """
     ddl = """
     CREATE TABLE IF NOT EXISTS mismatch_tracking (
       key TEXT PRIMARY KEY,
@@ -61,7 +66,6 @@ def init_db():
         conn.commit()
 
 def ensure_tag(conn, tag_name: str) -> int:
-    """Insert into tags if missing, then return tag_id."""
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO tags (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
@@ -71,7 +75,6 @@ def ensure_tag(conn, tag_name: str) -> int:
         return cur.fetchone()[0]
 
 def add_tag(episode_file_id: int, tag_name: str):
-    """Add a tag to an episode file if not already present."""
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             tag_id = ensure_tag(conn, tag_name)
@@ -86,7 +89,6 @@ def add_tag(episode_file_id: int, tag_name: str):
         logging.error(f"DB error adding tag '{tag_name}' to file {episode_file_id}: {e}")
 
 def remove_tag(episode_file_id: int, tag_name: str):
-    """Remove a tag from an episode file if present."""
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             with conn.cursor() as cur:
@@ -107,9 +109,6 @@ def remove_tag(episode_file_id: int, tag_name: str):
 
 # --- DB Helper (read-only) ---
 def get_mismatch_count(key: str) -> int:
-    """
-    Return the stored mismatch count for this key, or 0 if none or on error.
-    """
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             with conn.cursor() as cur:
@@ -196,7 +195,7 @@ def check_episode(series, episode):
         logging.warning(f"⚠️ Missing scene name for file {epfile.get('id')}")
         return
 
-    # 3) Extract season/episode from sceneName via regex
+    # 3) Extract season & episode from sceneName via regex
     m = re.search(r"[sS](\d{2})[eE](\d{2})", scene_name)
     if m:
         season, epnum = map(int, m.groups())
@@ -209,6 +208,11 @@ def check_episode(series, episode):
     key         = f"series::{series_norm}::S{season:02d}E{epnum:02d}"
     expected    = normalize_title(episode["title"])
     actual      = normalize_title(scene_name)
+
+    # 3a) Optional season‐filter
+    if SEASON_FILTER and season not in SEASON_FILTER:
+        logging.debug(f"⏩ Skipping {series['title']} {code}; season not in filter {SEASON_FILTER}")
+        return
 
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected title : {episode['title']}")
@@ -229,7 +233,7 @@ def check_episode(series, episode):
         )
         return
 
-    # 6) Else (under threshold) → proceed with normal logic
+    # 6) Under threshold & no special tag → proceed
     logging.error(f"❌ Scene title mismatch for {series['title']} {code} (count={current_count})")
     if not FORCE_RUN:
         logging.info("Skipping deletion/search (not force-run).")
@@ -252,6 +256,5 @@ def scan_library():
             check_episode(series, episode)
 
 if __name__ == "__main__":
-    # ensure tables exist before doing anything
     init_db()
     scan_library()
