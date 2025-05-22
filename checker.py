@@ -31,6 +31,15 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 
 # --- DB ---
+def init_db():
+    db_execute("""
+    CREATE TABLE IF NOT EXISTS mismatch_tracking (
+      key TEXT PRIMARY KEY,
+      count INTEGER NOT NULL DEFAULT 0,
+      last_mismatch TIMESTAMP
+    );
+    """)
+    
 def has_exceeded_threshold(series_title: str, season: int, episode_num: int) -> bool:
     """
     Return True if the stored mismatch count for this episode key exceeds MISMATCH_THRESHOLD.
@@ -171,4 +180,5 @@ def scan_library():
         logging.error(f"Library scan failed: {e}")
 
 if __name__ == "__main__":
+    init_db()
     scan_library()
