@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import re
 import requests
@@ -5,7 +6,6 @@ import logging
 import unicodedata
 import psycopg2
 from pathlib import Path
-from datetime import datetime
 
 # --- Logging Setup ---
 LOG_DIR = os.getenv("LOG_PATH", "/logs")
@@ -22,55 +22,52 @@ logging.basicConfig(
 )
 
 # --- Config ---
-SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
-SONARR_API_KEY = os.getenv("SONARR_API_KEY")
-SONARR_HEADERS = {"X-Api-Key": SONARR_API_KEY}
-TVDB_FILTER = os.getenv("TVDB_ID")
-FORCE_RUN = os.getenv("FR_RUN", "false").lower() == "true"
-DATABASE_URL = os.getenv("DATABASE_URL")
-#SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
+SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
+SONARR_API_KEY     = os.getenv("SONARR_API_KEY")
+SONARR_HEADERS     = {"X-Api-Key": SONARR_API_KEY}
+TVDB_FILTER        = os.getenv("TVDB_ID")
+FORCE_RUN          = os.getenv("FR_RUN", "false").lower() == "true"
+DATABASE_URL       = os.getenv("DATABASE_URL")
+SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "10"))
-# --- DB ---
-def db_execute(sql, params=None, fetch=False):
-    with db_connect() as conn, conn.cursor() as cur:
-        cur.execute(sql, params or ())
-        if fetch:
-            return cur.fetchall()
-        conn.commit()
-        
-def init_db():
-    db_execute("""
-    CREATE TABLE IF NOT EXISTS mismatch_tracking (
-      key TEXT PRIMARY KEY,
-      count INTEGER NOT NULL DEFAULT 0,
-      last_mismatch TIMESTAMP
-    );
-    """)
-    
-def db_connect():
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL not set")
-    return psycopg2.connect(DATABASE_URL, connect_timeout=5)
-    logger.info(f"🔍 LOG: DB connection established")
-        
+
+# --- DB Helper (read-only) ---
 def get_mismatch_count(key: str) -> int:
     """
-    Return the stored mismatch count for this key, or 0 if none.
+    Return the stored mismatch count for this key, or 0 if none or on error.
     """
     try:
         conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT count FROM mismatch_tracking WHERE key = %s",
-                    (key,)
-                )
-                row = cur.fetchone()
+        with conn.cursor() as cur:
+            cur.execute("SELECT count FROM mismatch_tracking WHERE key = %s", (key,))
+            row = cur.fetchone()
+        conn.close()
         return row[0] if row else 0
     except Exception as e:
         logging.error(f"DB error fetching mismatch count for {key}: {e}")
         return 0
-        
+
+# --- Ignore‐by‐tag Logic ---
+def should_ignore_episode_file(episode_file_id):
+    if not DATABASE_URL:
+        return False
+    try:
+        conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT 1
+                  FROM episode_tags et
+                  JOIN tags t ON et.tag_id = t.id
+                 WHERE et.episode_file_id = %s
+                   AND t.name = %s
+            """, (episode_file_id, SPECIAL_TAG_NAME))
+            found = cur.fetchone() is not None
+        conn.close()
+        return found
+    except Exception as e:
+        logging.error(f"🔍 IGNORE-CHECK error for file {episode_file_id}: {e}")
+        return False
+
 # --- Helpers ---
 def normalize_title(text):
     if not text:
@@ -105,15 +102,23 @@ def delete_file(file_id):
 
 def refresh_series(series_id):
     try:
-        requests.post(f"{SONARR_URL}/api/v3/command", headers=SONARR_HEADERS, json={"name": "RefreshSeries", "seriesId": series_id})
-        requests.post(f"{SONARR_URL}/api/v3/command", headers=SONARR_HEADERS, json={"name": "RescanSeries", "seriesId": series_id})
+        for cmd in ("RefreshSeries", "RescanSeries"):
+            requests.post(
+                f"{SONARR_URL}/api/v3/command",
+                headers=SONARR_HEADERS,
+                json={"name": cmd, "seriesId": series_id}
+            )
         logging.info(f"🔄 Refreshed/rescanned series ID {series_id}")
     except Exception as e:
         logging.error(f"Failed to refresh/rescan series {series_id}: {e}")
 
 def search_episode(episode_id):
     try:
-        requests.post(f"{SONARR_URL}/api/v3/command", headers=SONARR_HEADERS, json={"name": "EpisodeSearch", "episodeIds": [episode_id]})
+        requests.post(
+            f"{SONARR_URL}/api/v3/command",
+            headers=SONARR_HEADERS,
+            json={"name": "EpisodeSearch", "episodeIds": [episode_id]}
+        )
         logging.info(f"🔍 Initiated search for episode ID {episode_id}")
     except Exception as e:
         logging.error(f"Failed to initiate search for episode {episode_id}: {e}")
@@ -139,11 +144,10 @@ def check_episode(series, episode):
         logging.warning(f"⚠️ Missing scene name for file {epfile.get('id')}")
         return
 
-    # 3) Pull season/episode from file metadata (fallback to episode obj)
-    if epfile.get("episodes"):
-        first = epfile["episodes"][0]
-        season = first.get("seasonNumber", episode["seasonNumber"])
-        epnum  = first.get("episodeNumber", episode["episodeNumber"])
+    # 3) Extract season & episode from sceneName via regex
+    m = re.search(r"[sS](\d{2})[eE](\d{2})", scene_name)
+    if m:
+        season, epnum = map(int, m.groups())
     else:
         season = episode["seasonNumber"]
         epnum  = episode["episodeNumber"]
@@ -151,9 +155,8 @@ def check_episode(series, episode):
     code        = f"S{season:02}E{epnum:02}"
     series_norm = normalize_title(series["title"])
     key         = f"series::{series_norm}::S{season:02d}E{epnum:02d}"
-
-    expected = normalize_title(episode["title"])
-    actual   = normalize_title(scene_name)
+    expected    = normalize_title(episode["title"])
+    actual      = normalize_title(scene_name)
 
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected title : {episode['title']}")
@@ -173,33 +176,37 @@ def check_episode(series, episode):
         )
         return
 
-    # 6) Legitimate mismatch under threshold → proceed
+    # 6) Check for special‐tag ignore
+    if should_ignore_episode_file(epfile["id"]):
+        logging.info("⏩ Ignored due to special tag.")
+        return
+
+    # 7) Legitimate mismatch under threshold → proceed
     logging.error(f"❌ Scene title does NOT match expected title for {series['title']} {code}")
 
     if not FORCE_RUN:
         logging.info("Skipping automatic deletion/search (not in force run mode).")
         return
 
+    # 8) Force‐run actions
     delete_file(epfile["id"])
     refresh_series(series["id"])
     search_episode(episode["id"])
-    
+
 def scan_library():
     if not SONARR_API_KEY:
         logging.error("❌ SONARR_API_KEY is not set.")
         return
 
     try:
-        series_list = get_series_list()
-        for series in series_list:
+        for series in get_series_list():
             if TVDB_FILTER and str(series.get("tvdbId")) != TVDB_FILTER:
                 continue
             logging.info(f"\n=== Scanning: {series['title']} ===")
-            episodes = get_episodes(series["id"])
-            for episode in episodes:
+            for episode in get_episodes(series["id"]):
                 check_episode(series, episode)
     except Exception as e:
         logging.error(f"Library scan failed: {e}")
-        
+
 if __name__ == "__main__":
     scan_library()
