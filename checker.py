@@ -46,6 +46,7 @@ def init_db():
       last_mismatch TIMESTAMP
     );
     """)
+    
 def db_connect():
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL not set")
