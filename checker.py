@@ -6,7 +6,6 @@ import logging
 import unicodedata
 import psycopg2
 from datetime import datetime, timedelta
-from pathlib import Path
 
 # --- Logging Setup ---
 LOG_DIR = os.getenv("LOG_PATH", "/logs")
@@ -22,16 +21,15 @@ logging.basicConfig(
 )
 
 # --- Config ---
-SONARR_URL          = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
-SONARR_API_KEY      = os.getenv("SONARR_API_KEY")
-SONARR_HEADERS      = {"X-Api-Key": SONARR_API_KEY}
-TVDB_FILTER         = os.getenv("TVDB_ID")
-FORCE_RUN           = os.getenv("FR_RUN", "false").lower() == "true"
-DATABASE_URL        = os.getenv("DATABASE_URL")
-SPECIAL_TAG_NAME    = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
-MISMATCH_THRESHOLD  = int(os.getenv("MISMATCH_THRESHOLD", "10"))
-# TTL in days for purging old mismatch rows
-MISMATCH_TTL_DAYS   = int(os.getenv("MISMATCH_TTL_DAYS", "30"))
+SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
+SONARR_API_KEY     = os.getenv("SONARR_API_KEY")
+SONARR_HEADERS     = {"X-Api-Key": SONARR_API_KEY}
+TVDB_FILTER        = os.getenv("TVDB_ID")
+FORCE_RUN          = os.getenv("FR_RUN", "false").lower() == "true"
+DATABASE_URL       = os.getenv("DATABASE_URL")
+SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
+MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "10"))
+MISMATCH_TTL_DAYS  = int(os.getenv("MISMATCH_TTL_DAYS", "30"))
 
 # --- DB Init & Maintenance ---
 def init_db():
@@ -42,13 +40,13 @@ def init_db():
       last_mismatch TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS tags (
-      id SERIAL PRIMARY KEY,
-      name TEXT UNIQUE NOT NULL
+      id   SERIAL PRIMARY KEY,
+      name TEXT   UNIQUE NOT NULL
     );
     CREATE TABLE IF NOT EXISTS episode_tags (
-      episode_file_id INTEGER NOT NULL,
+      key    TEXT NOT NULL REFERENCES mismatch_tracking(key),
       tag_id INTEGER NOT NULL REFERENCES tags(id),
-      PRIMARY KEY (episode_file_id, tag_id)
+      PRIMARY KEY (key, tag_id)
     );
     """
     with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
@@ -67,11 +65,11 @@ def purge_old_mismatches(ttl_days: int):
                 )
                 deleted = cur.rowcount
             conn.commit()
-        logging.info(f"🗑️ Purged {deleted} mismatch records older than {ttl_days} days")
+        logging.info(f"🗑️ Purged {deleted} old mismatch records (> {ttl_days} days)")
     except Exception as e:
         logging.error(f"DB error purging old mismatches: {e}")
 
-# --- Tag Helpers ---
+# --- Tag Helpers (key-based) ---
 def ensure_tag(conn, tag_name: str) -> int:
     with conn.cursor() as cur:
         cur.execute(
@@ -81,21 +79,23 @@ def ensure_tag(conn, tag_name: str) -> int:
         cur.execute("SELECT id FROM tags WHERE name = %s", (tag_name,))
         return cur.fetchone()[0]
 
-def add_tag(episode_file_id: int, tag_name: str):
+def add_tag(key: str, tag_name: str):
+    """Tag this key if not already tagged."""
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             tag_id = ensure_tag(conn, tag_name)
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO episode_tags (episode_file_id, tag_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                    (episode_file_id, tag_id)
+                    "INSERT INTO episode_tags (key, tag_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    (key, tag_id)
                 )
             conn.commit()
-        logging.info(f"🏷️ Tagged file {episode_file_id} with '{tag_name}'")
+        logging.info(f"🏷️ Tagged key {key} with '{tag_name}'")
     except Exception as e:
-        logging.error(f"DB error adding tag to file {episode_file_id}: {e}")
+        logging.error(f"DB error adding tag '{tag_name}' to {key}: {e}")
 
-def remove_tag(episode_file_id: int, tag_name: str):
+def remove_tag(key: str, tag_name: str):
+    """Remove the tag from this key."""
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             with conn.cursor() as cur:
@@ -104,25 +104,22 @@ def remove_tag(episode_file_id: int, tag_name: str):
                     DELETE FROM episode_tags et
                       USING tags t
                      WHERE et.tag_id = t.id
-                       AND et.episode_file_id = %s
+                       AND et.key = %s
                        AND t.name = %s
                     """,
-                    (episode_file_id, tag_name)
+                    (key, tag_name)
                 )
             conn.commit()
-        logging.info(f"❎ Removed tag '{tag_name}' from file {episode_file_id}")
+        logging.info(f"❎ Removed tag '{tag_name}' from {key}")
     except Exception as e:
-        logging.error(f"DB error removing tag from file {episode_file_id}: {e}")
+        logging.error(f"DB error removing tag '{tag_name}' from {key}: {e}")
 
 # --- Mismatch‐Tracking Helpers ---
 def get_mismatch_count(key: str) -> int:
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT count FROM mismatch_tracking WHERE key = %s",
-                    (key,)
-                )
+                cur.execute("SELECT count FROM mismatch_tracking WHERE key = %s", (key,))
                 row = cur.fetchone()
         return row[0] if row else 0
     except Exception as e:
@@ -139,7 +136,7 @@ def delete_mismatch_record(key: str):
     except Exception as e:
         logging.error(f"DB error deleting mismatch record {key}: {e}")
 
-# --- Helpers & Sonarr API ---
+# --- Utils & Sonarr API ---
 def normalize_title(text):
     if not text:
         return ""
@@ -192,19 +189,22 @@ def search_episode(episode_id):
 
 # --- Main Logic ---
 def check_episode(series, episode):
-    # 1) Skip if no file
+    # Skip if no file
     if not episode.get("hasFile") or not episode.get("episodeFileId"):
         return
 
-    # 2) Fetch file metadata
+    # Fetch file metadata
     try:
         epfile = get_episode_file(episode["episodeFileId"])
     except Exception as e:
-        logging.error(f"❌ Could not fetch file for {series['title']} S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}: {e}")
+        logging.error(
+            f"❌ Could not fetch file for "
+            f"{series['title']} S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}: {e}"
+        )
         return
 
     scene = epfile.get("sceneName") or ""
-    # 3) Extract season/episode from sceneName
+    # Extract season/episode from sceneName
     m = re.search(r"[sS](\d{2})[eE](\d{2})", scene)
     if m:
         season, epnum = map(int, m.groups())
@@ -222,24 +222,24 @@ def check_episode(series, episode):
     logging.info(f"🎯 Expected: {episode['title']}")
     logging.info(f"🎞️  Scene:    {scene}")
 
-    # 4) On match → remove both tag & mismatch record
+    # On match → remove tag & delete row
     if expected in actual:
-        remove_tag(epfile["id"], SPECIAL_TAG_NAME)
+        remove_tag(key, SPECIAL_TAG_NAME)
         delete_mismatch_record(key)
         logging.info(f"✅ Match for {code}; cleared tag & mismatch record")
         return
 
-    # 5) Read count; on threshold → add tag only
+    # On threshold → add tag only
     cnt = get_mismatch_count(key)
     if cnt >= MISMATCH_THRESHOLD:
-        add_tag(epfile["id"], SPECIAL_TAG_NAME)
-        logging.info(f"⏩ Threshold reached ({cnt}) → tagged file and skipping")
+        add_tag(key, SPECIAL_TAG_NAME)
+        logging.info(f"⏩ Threshold reached ({cnt}) → tagged key and skipping")
         return
 
-    # 6) Under threshold → proceed with your delete/refresh/search if FORCE_RUN
+    # Under threshold → proceed
     logging.error(f"❌ Mismatch for {code} (count={cnt})")
     if not FORCE_RUN:
-        logging.info("Skipping actions (not force‐run).")
+        logging.info("Skipping actions (not force-run).")
         return
 
     delete_file(epfile["id"])
