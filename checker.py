@@ -35,17 +35,20 @@ MISMATCH_TTL_DAYS  = int(os.getenv("MISMATCH_TTL_DAYS", "30"))
 def init_db():
     ddl = """
     CREATE TABLE IF NOT EXISTS mismatch_tracking (
-      key TEXT PRIMARY KEY,
-      count INTEGER NOT NULL DEFAULT 0,
+      key           TEXT PRIMARY KEY,
+      count         INTEGER NOT NULL DEFAULT 0,
       last_mismatch TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS tags (
       id   SERIAL PRIMARY KEY,
       name TEXT   UNIQUE NOT NULL
     );
+    -- episode_tags now carries season & episode explicitly
     CREATE TABLE IF NOT EXISTS episode_tags (
-      key    TEXT NOT NULL REFERENCES mismatch_tracking(key),
-      tag_id INTEGER NOT NULL REFERENCES tags(id),
+      key     TEXT NOT NULL REFERENCES mismatch_tracking(key),
+      tag_id  INTEGER NOT NULL REFERENCES tags(id),
+      season  INTEGER NOT NULL,
+      episode INTEGER NOT NULL,
       PRIMARY KEY (key, tag_id)
     );
     """
@@ -79,18 +82,24 @@ def ensure_tag(conn, tag_name: str) -> int:
         cur.execute("SELECT id FROM tags WHERE name = %s", (tag_name,))
         return cur.fetchone()[0]
 
-def add_tag(key: str, tag_name: str):
-    """Tag this key if not already tagged."""
+def add_tag(key: str, tag_name: str, season: int, episode: int):
+    """
+    Tag this key for a specific season/episode.
+    """
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             tag_id = ensure_tag(conn, tag_name)
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO episode_tags (key, tag_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                    (key, tag_id)
+                    """
+                    INSERT INTO episode_tags (key, tag_id, season, episode)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (key, tag_id) DO NOTHING
+                    """,
+                    (key, tag_id, season, episode)
                 )
             conn.commit()
-        logging.info(f"🏷️ Tagged key {key} with '{tag_name}'")
+        logging.info(f"🏷️ Tagged {key} (S{season:02}E{episode:02}) with '{tag_name}'")
     except Exception as e:
         logging.error(f"DB error adding tag '{tag_name}' to {key}: {e}")
 
@@ -204,17 +213,22 @@ def check_episode(series, episode):
         return
 
     scene = epfile.get("sceneName") or ""
-    # Extract season/episode from sceneName
-    m = re.search(r"[sS](\d{2})[eE](\d{2})", scene)
+    m = re.search(r"[sS](\d{2})[eE](\d{2})", scene_name)
     if m:
-        season, epnum = map(int, m.groups())
+        parsed_season, parsed_epnum = map(int, m.groups())
     else:
-        season = episode["seasonNumber"]
-        epnum  = episode["episodeNumber"]
+        parsed_season = episode["seasonNumber"]
+        parsed_epnum  = episode["episodeNumber"]
+
+    series_norm = normalize_title(series["title"])
+    key = f"series::{series_norm}::S{parsed_season:02d}E{parsed_epnum:02d}"
+
+    # 2) Grab Sonarr’s “official” season/episode for tagging
+    expected_season = episode["seasonNumber"]
+    expected_epnum  = episode["episodeNumber"]
 
     code      = f"S{season:02}E{epnum:02}"
     series_n  = normalize_title(series["title"])
-    key       = f"series::{series_n}::S{season:02d}E{epnum:02d}"
     expected  = normalize_title(episode["title"])
     actual    = normalize_title(scene)
 
