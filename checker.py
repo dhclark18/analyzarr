@@ -213,7 +213,7 @@ def check_episode(series, episode):
         return
 
     scene = epfile.get("sceneName") or ""
-    m = re.search(r"[sS](\d{2})[eE](\d{2})", scene_name)
+    m = re.search(r"[sS](\d{2})[eE](\d{2})", scene)
     if m:
         parsed_season, parsed_epnum = map(int, m.groups())
     else:
