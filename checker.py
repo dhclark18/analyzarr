@@ -30,7 +30,17 @@ DATABASE_URL       = os.getenv("DATABASE_URL")
 SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "10"))
 MISMATCH_TTL_DAYS  = int(os.getenv("MISMATCH_TTL_DAYS", "30"))
-
+#Optional season filter
+_raw = os.getenv("SEASON_FILTER")
+if _raw:
+    try:
+        SEASON_FILTER = [int(x.strip()) for x in _raw.split(",")]
+    except ValueError:
+        logging.warning(f"Invalid SEASON_FILTER '{_raw}', ignoring.")
+        SEASON_FILTER = None
+else:
+    SEASON_FILTER = None
+    
 # --- DB Init & Maintenance ---
 def init_db():
     ddl = """
