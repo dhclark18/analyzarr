@@ -5,8 +5,8 @@ from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
-# Configure via environment variable:
-#   export DATABASE_URL="postgresql://user:pass@host:5432/dbname"
+# DATABASE_URL should point at your postgres container/service:
+# e.g. postgresql://sonarr:sonarr@postgres:5432/sonarr_checker
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
@@ -16,11 +16,19 @@ def get_db_connection():
 def index():
     conn = get_db_connection()
     with conn.cursor() as cur:
-        cur.execute("SELECT * FROM your_table_name ORDER BY id;")
-        rows = cur.fetchall()   # list of dicts if using RealDictCursor
+        cur.execute("""
+            SELECT
+              key,
+              count,
+              last_mismatch,
+              flagged_at
+            FROM mismatch_tracking
+            ORDER BY key;
+        """)
+        rows = cur.fetchall()
     conn.close()
     return render_template("index.html", rows=rows)
 
 if __name__ == "__main__":
-    # For development only; use Gunicorn or uWSGI in production
+    # dev server; replace with Gunicorn/etc. in production
     app.run(host="0.0.0.0", port=5000, debug=True)
