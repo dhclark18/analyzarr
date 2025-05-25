@@ -34,7 +34,7 @@ def index():
             all_data[tbl] = cur.fetchall()
 
     conn.close()
-    return render_template("index_all.html", all_data=all_data)
+    return render_template("index.html", all_data=all_data)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
