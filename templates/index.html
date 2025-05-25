@@ -2,37 +2,46 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Mismatch Tracking</title>
+  <title>All Database Tables</title>
   <style>
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ccc; padding: 6px; }
+    body { font-family: sans-serif; padding: 1rem; }
+    h2 { margin-top: 2rem; }
+    table { border-collapse: collapse; width: 100%; margin-top: .5rem; }
+    th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
+    thead { background: #f0f0f0; }
   </style>
 </head>
 <body>
-  <h1>Mismatch Tracking</h1>
+  <h1>Database Contents</h1>
 
-  {% if rows|length == 0 %}
-    <p><em>No mismatches recorded.</em></p>
-  {% else %}
-    <table>
-      <thead>
-        <tr>
-          {% for col in rows[0].keys() %}
-            <th>{{ col }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-          <tr>
-            {% for value in row.values() %}
-              <td>{{ value }}</td>
+  {% for table, rows in all_data.items() %}
+    <section>
+      <h2>{{ table }}</h2>
+
+      {% if rows|length == 0 %}
+        <p><em>(No rows in {{ table }})</em></p>
+      {% else %}
+        <table>
+          <thead>
+            <tr>
+              {% for col in rows[0].keys() %}
+                <th>{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                {% for val in row.values() %}
+                  <td>{{ val }}</td>
+                {% endfor %}
+              </tr>
             {% endfor %}
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
+          </tbody>
+        </table>
+      {% endif %}
+    </section>
+  {% endfor %}
 
 </body>
 </html>
