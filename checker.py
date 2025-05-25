@@ -76,8 +76,7 @@ def init_db():
       tag_id  INTEGER NOT NULL
                 REFERENCES tags(id)
                 ON DELETE CASCADE,
-      season  INTEGER NOT NULL,
-      episode INTEGER NOT NULL,
+      code    TEXT NOT NULL,
       PRIMARY KEY (key, tag_id)
     );
     """
@@ -87,22 +86,6 @@ def init_db():
             cur.execute(ddl_tags)
             cur.execute(ddl_ep_tags)
         conn.commit()
-
-
-def purge_old_mismatches(ttl_days: int) -> None:
-    cutoff = datetime.utcnow() - timedelta(days=ttl_days)
-    try:
-        with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "DELETE FROM mismatch_tracking WHERE last_mismatch < %s",
-                    (cutoff,)
-                )
-                deleted = cur.rowcount
-            conn.commit()
-        logging.info(f"🗑️ Purged {deleted} old mismatch records (> {ttl_days} days)")
-    except Exception as e:
-        logging.error(f"DB error purging old mismatches: {e}")
 
 # --- Mismatch Count ---
 def get_mismatch_count(key: str) -> int:
@@ -138,8 +121,13 @@ def ensure_tag(conn, tag_name: str) -> int:
         return cur.fetchone()[0]
 
 
-def add_tag(key: str, tag_name: str, season: int, episode: int) -> None:
+def add_tag(key: str, tag_name: str, code: str) -> None:
+    """
+    Add a tag for this key and episode code (e.g., S01E02).
+    """
     try:
+        season = int(code[1:3])
+        episode = int(code[4:6])
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             tag_id = ensure_tag(conn, tag_name)
             with conn.cursor() as cur:
@@ -154,14 +142,16 @@ def add_tag(key: str, tag_name: str, season: int, episode: int) -> None:
                 inserted = cur.rowcount
             conn.commit()
         if inserted:
-            logging.info(f"🏷️ Tagged {key} (S{season:02}E{episode:02}) with '{tag_name}'")
+            logging.info(f"🏷️ Tagged {key} {code} with '{tag_name}'")
         else:
             logging.debug(f"⚠️ Episode {key} already tagged with '{tag_name}'")
     except Exception as e:
-        logging.error(f"DB error adding tag '{tag_name}' to {key}: {e}")
+        logging.error(f"DB error adding tag '{tag_name}' to {key} {code}: {e}")
 
-
-def remove_tag(key: str, tag_name: str, season: int, episode: int) -> None:
+def remove_tag(key: str, tag_name: str, code: str) -> None:
+    """
+    Remove the tag for this key and episode code (e.g., S01E02).
+    """
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             with conn.cursor() as cur:
@@ -172,15 +162,15 @@ def remove_tag(key: str, tag_name: str, season: int, episode: int) -> None:
                      WHERE et.tag_id = t.id
                        AND et.key = %s
                        AND t.name = %s
-                       AND et.season = %s
-                       AND et.episode = %s
+                       AND CONCAT('S', LPAD(CAST(et.season AS TEXT), 2, '0'),
+                                  'E', LPAD(CAST(et.episode AS TEXT), 2, '0')) = %s
                     """,
-                    (key, tag_name, season, episode)
+                    (key, tag_name, code)
                 )
             conn.commit()
-        logging.info(f"❎ Removed tag '{tag_name}' for {key} S{season:02d}E{episode:02d}")
+        logging.info(f"❎ Removed tag '{tag_name}' for {key} {code}")
     except Exception as e:
-        logging.error(f"DB error removing tag '{tag_name}' from {key}: {e}")
+        logging.error(f"DB error removing tag '{tag_name}' from {key} {code}: {e}")
 
 # --- Utils & Sonarr API ---
 def normalize_title(text: str) -> str:
@@ -294,13 +284,13 @@ def check_episode(series: dict, episode: dict) -> None:
     logging.info(f"🎞️ Scene:    {scene}")
 
     if expected in actual:
-        remove_tag(key, SPECIAL_TAG_NAME, expected_season, expected_epnum)
+        remove_tag(key, SPECIAL_TAG_NAME, code)
         logging.info(f"✅ Match for {series['title']} {code}; tag removed")
         return
 
     cnt = get_mismatch_count(key)
     if cnt >= MISMATCH_THRESHOLD:
-        add_tag(key, SPECIAL_TAG_NAME, expected_season, expected_epnum)
+        add_tag(key, SPECIAL_TAG_NAME, code)
         logging.info(f"⏩ Threshold reached ({cnt}) → tagged {series['title']} {code}")
         return
 
@@ -332,5 +322,4 @@ def scan_library() -> None:
 
 if __name__ == "__main__":
     init_db()
-    purge_old_mismatches(MISMATCH_TTL_DAYS)
     scan_library()
