@@ -231,7 +231,7 @@ def check_episode(series, episode):
     expected_season = episode["seasonNumber"]
     expected_epnum  = episode["episodeNumber"]
 
-    code      = f"S{season:02}E{epnum:02}"
+    code      = f"S{expected_season:02}E{expected_epnum:02}"
     series_n  = normalize_title(series["title"])
     expected  = normalize_title(episode["title"])
     actual    = normalize_title(scene)
