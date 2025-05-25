@@ -2,31 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>My Data</title>
+  <title>Mismatch Tracking</title>
   <style>
     table { border-collapse: collapse; width: 100%; }
     th, td { border: 1px solid #ccc; padding: 6px; }
   </style>
 </head>
 <body>
-  <h1>Rows in <code>your_table_name</code></h1>
-  <table>
-    <thead>
-      <tr>
-        {% for col in rows[0].keys() %}
-        <th>{{ col }}</th>
+  <h1>Mismatch Tracking</h1>
+
+  {% if rows|length == 0 %}
+    <p><em>No mismatches recorded.</em></p>
+  {% else %}
+    <table>
+      <thead>
+        <tr>
+          {% for col in rows[0].keys() %}
+            <th>{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            {% for value in row.values() %}
+              <td>{{ value }}</td>
+            {% endfor %}
+          </tr>
         {% endfor %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
-      <tr>
-        {% for value in row.values() %}
-        <td>{{ value }}</td>
-        {% endfor %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+      </tbody>
+    </table>
+  {% endif %}
+
 </body>
 </html>
