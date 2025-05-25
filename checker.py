@@ -251,7 +251,7 @@ def check_episode(series, episode):
     logging.info(f"🎞️  Scene:    {scene}")
 
     # Optional season‐filter
-    if SEASON_FILTER and season not in SEASON_FILTER:
+    if SEASON_FILTER and expected_season not in SEASON_FILTER:
         logging.debug(f"⏩ Skipping {series['title']} {code}; season not in filter {SEASON_FILTER}")
         return
         
