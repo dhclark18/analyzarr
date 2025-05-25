@@ -1,47 +1,38 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>All Database Tables</title>
-  <style>
-    body { font-family: sans-serif; padding: 1rem; }
-    h2 { margin-top: 2rem; }
-    table { border-collapse: collapse; width: 100%; margin-top: .5rem; }
-    th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
-    thead { background: #f0f0f0; }
-  </style>
-</head>
-<body>
-  <h1>Database Contents</h1>
+{% extends "base.html" %}
+
+{% block title %}All Tables – DB Viewer{% endblock %}
+
+{% block content %}
+  <h1 class="my-4">Database Contents</h1>
 
   {% for table, rows in all_data.items() %}
-    <section>
-      <h2>{{ table }}</h2>
+    <div class="mb-5">
+      <h2 class="h4">{{ table.replace('_',' ').title() }}</h2>
 
       {% if rows|length == 0 %}
-        <p><em>(No rows in {{ table }})</em></p>
+        <div class="alert alert-secondary">No rows in {{ table }}.</div>
       {% else %}
-        <table>
-          <thead>
-            <tr>
-              {% for col in rows[0].keys() %}
-                <th>{{ col }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in rows %}
+        <div class="table-responsive">
+          <table class="table table-striped table-hover">
+            <thead class="table-dark">
               <tr>
-                {% for val in row.values() %}
-                  <td>{{ val }}</td>
+                {% for col in rows[0].keys() %}
+                  <th scope="col">{{ col.replace('_',' ').title() }}</th>
                 {% endfor %}
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr>
+                  {% for val in row.values() %}
+                    <td>{{ val }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       {% endif %}
-    </section>
+    </div>
   {% endfor %}
-
-</body>
-</html>
+{% endblock %}
