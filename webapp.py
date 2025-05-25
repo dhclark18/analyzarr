@@ -2,11 +2,10 @@ import os
 from flask import Flask, render_template
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import sql
 
 app = Flask(__name__)
 
-# DATABASE_URL should point at your postgres container/service:
-# e.g. postgresql://sonarr:sonarr@postgres:5432/sonarr_checker
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
@@ -16,18 +15,26 @@ def get_db_connection():
 def index():
     conn = get_db_connection()
     with conn.cursor() as cur:
+        # 1) get all user tables in public schema
         cur.execute("""
-            SELECT
-              key,
-              count,
-              last_mismatch
-            FROM mismatch_tracking
-            ORDER BY key;
+            SELECT table_name
+              FROM information_schema.tables
+             WHERE table_schema = 'public'
+               AND table_type   = 'BASE TABLE'
+            ORDER BY table_name;
         """)
-        rows = cur.fetchall()
+        tables = [row['table_name'] for row in cur.fetchall()]
+
+        all_data = {}
+        # 2) for each table, fetch all rows
+        for tbl in tables:
+            cur.execute(
+                sql.SQL("SELECT * FROM {}").format(sql.Identifier(tbl))
+            )
+            all_data[tbl] = cur.fetchall()
+
     conn.close()
-    return render_template("index.html", rows=rows)
+    return render_template("index_all.html", all_data=all_data)
 
 if __name__ == "__main__":
-    # dev server; replace with Gunicorn/etc. in production
     app.run(host="0.0.0.0", port=5000, debug=True)
