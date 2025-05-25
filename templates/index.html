@@ -3,36 +3,54 @@
 {% block title %}All Tables – DB Viewer{% endblock %}
 
 {% block content %}
-  <h1 class="my-4">Database Contents</h1>
+  <h1 class="mb-4 text-light">Database Contents</h1>
 
-  {% for table, rows in all_data.items() %}
-    <div class="mb-5">
-      <h2 class="h4">{{ table.replace('_',' ').title() }}</h2>
-
-      {% if rows|length == 0 %}
-        <div class="alert alert-secondary">No rows in {{ table }}.</div>
-      {% else %}
-        <div class="table-responsive">
-          <table class="table table-striped table-hover">
-            <thead class="table-dark">
-              <tr>
-                {% for col in rows[0].keys() %}
-                  <th scope="col">{{ col.replace('_',' ').title() }}</th>
-                {% endfor %}
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in rows %}
-                <tr>
-                  {% for val in row.values() %}
-                    <td>{{ val }}</td>
+  <div class="accordion" id="dbAccordion">
+    {% for table, rows in all_data.items() %}
+    <div class="accordion-item bg-dark text-light border-secondary">
+      <h2 class="accordion-header" id="heading{{ loop.index }}">
+        <button class="accordion-button collapsed bg-secondary text-light" 
+                type="button" 
+                data-bs-toggle="collapse"
+                data-bs-target="#collapse{{ loop.index }}"
+                aria-expanded="false"
+                aria-controls="collapse{{ loop.index }}">
+          {{ table.replace('_',' ').title() }}
+          <span class="badge bg-light text-dark ms-2">{{ rows|length }}</span>
+        </button>
+      </h2>
+      <div id="collapse{{ loop.index }}" 
+           class="accordion-collapse collapse" 
+           aria-labelledby="heading{{ loop.index }}" 
+           data-bs-parent="#dbAccordion">
+        <div class="accordion-body p-0">
+          {% if rows|length == 0 %}
+            <div class="p-3 text-center text-muted">No rows in {{ table }}.</div>
+          {% else %}
+            <div class="table-responsive">
+              <table class="table table-striped table-dark mb-0">
+                <thead>
+                  <tr>
+                    {% for col in rows[0].keys() %}
+                      <th scope="col">{{ col.replace('_',' ').title() }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in rows %}
+                    <tr>
+                      {% for val in row.values() %}
+                        <td>{{ val }}</td>
+                      {% endfor %}
+                    </tr>
                   {% endfor %}
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
         </div>
-      {% endif %}
+      </div>
     </div>
-  {% endfor %}
+    {% endfor %}
+  </div>
 {% endblock %}
