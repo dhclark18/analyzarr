@@ -151,8 +151,12 @@ def add_tag(key: str, tag_name: str, season: int, episode: int) -> None:
                     """,
                     (key, tag_id, season, episode)
                 )
+                inserted = cur.rowcount
             conn.commit()
-        logging.info(f"🏷️ Tagged {key} (S{season:02}E{episode:02}) with '{tag_name}'")
+        if inserted:
+            logging.info(f"🏷️ Tagged {key} (S{season:02}E{episode:02}) with '{tag_name}'")
+        else:
+            logging.debug(f"⚠️ Episode {key} already tagged with '{tag_name}'")
     except Exception as e:
         logging.error(f"DB error adding tag '{tag_name}' to {key}: {e}")
 
