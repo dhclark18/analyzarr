@@ -252,7 +252,7 @@ def check_episode(series, episode):
 
     # Optional season‐filter
     if SEASON_FILTER and expected_season not in SEASON_FILTER:
-        logging.debug(f"⏩ Skipping {series['title']} {code}; season not in filter {SEASON_FILTER}")
+        logging.debug(f"⏩ Skipping; season not in filter")
         return
         
      # On a real match → remove tag using Sonarr’s expected values
