@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}My Flask App{% endblock %}</title>
+
+  <!-- Bootstrap CSS (via CDN) -->
+  <link 
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.4.0/dist/css/bootstrap.min.css" 
+    rel="stylesheet" 
+    integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" 
+    crossorigin="anonymous">
+
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <!-- Optional Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">DB Viewer</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Bootstrap Bundle JS (includes Popper) -->
+  <script 
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.4.0/dist/js/bootstrap.bundle.min.js" 
+    integrity="sha384-…your-integrity-hash…" 
+    crossorigin="anonymous"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
