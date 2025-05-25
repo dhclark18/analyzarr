@@ -103,8 +103,10 @@ def add_tag(key: str, tag_name: str, season: int, episode: int):
     except Exception as e:
         logging.error(f"DB error adding tag '{tag_name}' to {key}: {e}")
 
-def remove_tag(key: str, tag_name: str):
-    """Remove the tag from this key."""
+def remove_tag(key: str, tag_name: str, season: int, episode: int):
+    """
+    Remove the tag for this key *and* the given season/episode.
+    """
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             with conn.cursor() as cur:
@@ -115,13 +117,15 @@ def remove_tag(key: str, tag_name: str):
                      WHERE et.tag_id = t.id
                        AND et.key = %s
                        AND t.name = %s
+                       AND et.season = %s
+                       AND et.episode = %s
                     """,
-                    (key, tag_name)
+                    (key, tag_name, season, episode)
                 )
             conn.commit()
-        logging.info(f"❎ Removed tag '{tag_name}' from {key}")
+        logging.info(f"❎ Removed tag '{tag_name}' for {key} S{season:02d}E{episode:02d}")
     except Exception as e:
-        logging.error(f"DB error removing tag '{tag_name}' from {key}: {e}")
+        logging.error(f"DB error removing tag '{tag_name}' from {key} S{season:02d}E{episode:02d}: {e}")
 
 # --- Mismatch‐Tracking Helpers ---
 def get_mismatch_count(key: str) -> int:
@@ -236,18 +240,23 @@ def check_episode(series, episode):
     logging.info(f"🎯 Expected: {episode['title']}")
     logging.info(f"🎞️  Scene:    {scene}")
 
-    # On match → remove tag & delete row
-    if expected in actual:
-        remove_tag(key, SPECIAL_TAG_NAME)
-        delete_mismatch_record(key)
-        logging.info(f"✅ Match for {code}; cleared tag & mismatch record")
+     # On a real match → remove tag using Sonarr’s expected values
+    if normalize_title(episode["title"]) in normalize_title(scene_name):
+        remove_tag(key, SPECIAL_TAG_NAME, expected_season, expected_epnum)
+        logging.info(
+            f"✅ Match for {series['title']} "
+            f"S{expected_season:02d}E{expected_epnum:02d}; tag removed"
+        )
         return
 
-    # On threshold → add tag only
+   # On threshold → tag using Sonarr’s expected values
     cnt = get_mismatch_count(key)
     if cnt >= MISMATCH_THRESHOLD:
-        add_tag(key, SPECIAL_TAG_NAME)
-        logging.info(f"⏩ Threshold reached ({cnt}) → tagged key and skipping")
+        add_tag(key, SPECIAL_TAG_NAME, expected_season, expected_epnum)
+        logging.info(
+            f"⏩ Threshold reached ({cnt}) → tagged "
+            f"{series['title']} S{expected_season:02d}E{expected_epnum:02d}"
+        )
         return
 
     # Under threshold → proceed
