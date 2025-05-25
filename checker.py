@@ -33,9 +33,8 @@ SONARR_API_KEY = os.getenv("SONARR_API_KEY")
 if not SONARR_API_KEY:
     logging.error("❌ SONARR_API_KEY not set.")
     sys.exit(1)
-SONARR_HEADERS = {"X-Api-Key": SONARR_API_KEY}
 SONARR = requests.Session()
-SONARR.headers.update(SONARR_HEADERS)
+SONARR.headers.update({"X-Api-Key": SONARR_API_KEY})
 
 TVDB_FILTER = os.getenv("TVDB_ID")
 FORCE_RUN = os.getenv("FR_RUN", "false").lower() == "true"
@@ -56,7 +55,13 @@ else:
 
 # --- DB Init & Maintenance ---
 def init_db():
-    # Only create tag-related tables; mismatch_tracking is managed by another script
+    ddl_mismatch = """
+    CREATE TABLE IF NOT EXISTS mismatch_tracking (
+      key           TEXT PRIMARY KEY,
+      count         INTEGER NOT NULL DEFAULT 0,
+      last_mismatch TIMESTAMP
+    );
+    """
     ddl_tags = """
     CREATE TABLE IF NOT EXISTS tags (
       id   SERIAL PRIMARY KEY,
@@ -78,6 +83,7 @@ def init_db():
     """
     with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
         with conn.cursor() as cur:
+            cur.execute(ddl_mismatch)
             cur.execute(ddl_tags)
             cur.execute(ddl_ep_tags)
         conn.commit()
@@ -259,7 +265,6 @@ def check_episode(series: dict, episode: dict) -> None:
     series_norm = normalize_title(series["title"])
     key = f"series::{series_norm}::S{parsed_season:02d}E{parsed_epnum:02d}"
 
-    # Sonarr’s expected values
     expected_season = episode["seasonNumber"]
     expected_epnum = episode["episodeNumber"]
     expected = normalize_title(episode["title"])
@@ -268,35 +273,19 @@ def check_episode(series: dict, episode: dict) -> None:
     code = f"S{expected_season:02}E{expected_epnum:02}"
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected: {episode['title']}")
-    logging.info(f"🎞️  Scene:    {scene}")
+    logging.info(f"🎞️ Scene:    {scene}")
 
-    # Optional season‐filter
-    if SEASON_FILTER and expected_season not in SEASON_FILTER:
-        logging.debug(
-            f"⏩ Skipping {series['title']} {code}; season not in filter {SEASON_FILTER}"
-        )
-        return
-
-    # On a match → remove tag
     if expected in actual:
         remove_tag(key, SPECIAL_TAG_NAME, expected_season, expected_epnum)
-        logging.info(
-            f"✅ Match for {series['title']} "
-            f"S{expected_season:02d}E{expected_epnum:02d}; tag removed"
-        )
+        logging.info(f"✅ Match for {series['title']} {code}; tag removed")
         return
 
-    # Check threshold without incrementing
     cnt = get_mismatch_count(key)
     if cnt >= MISMATCH_THRESHOLD:
         add_tag(key, SPECIAL_TAG_NAME, expected_season, expected_epnum)
-        logging.info(
-            f"⏩ Threshold reached ({cnt}) → tagged "
-            f"{series['title']} S{expected_season:02d}E{expected_epnum:02d}"
-        )
+        logging.info(f"⏩ Threshold reached ({cnt}) → tagged {series['title']} {code}")
         return
 
-    # Under threshold → optionally delete & re-search
     logging.error(f"❌ Mismatch for {code} (count={cnt})")
     if not FORCE_RUN:
         logging.info("Skipping actions (not force-run).")
@@ -313,12 +302,14 @@ def scan_library() -> None:
             continue
         logging.info(f"\n=== Scanning {s['title']} ===")
         for ep in get_episodes(s["id"]):
+            season = ep.get("seasonNumber")
+            if SEASON_FILTER and season not in SEASON_FILTER:
+                logging.debug(f"⏩ Skipping S{season:02d} for {s['title']} (filter={SEASON_FILTER})")
+                continue
             try:
                 check_episode(s, ep)
             except Exception as e:
-                logging.error(
-                    f"Fatal error checking {s['title']} ep {ep.get('id')}: {e}"
-                )
+                logging.error(f"Fatal error checking {s['title']} ep {ep.get('id')}: {e}")
 
 
 if __name__ == "__main__":
