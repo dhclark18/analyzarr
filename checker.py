@@ -241,7 +241,7 @@ def check_episode(series, episode):
     logging.info(f"🎞️  Scene:    {scene}")
 
      # On a real match → remove tag using Sonarr’s expected values
-    if normalize_title(episode["title"]) in normalize_title(scene_name):
+    if expected in actual:
         remove_tag(key, SPECIAL_TAG_NAME, expected_season, expected_epnum)
         logging.info(
             f"✅ Match for {series['title']} "
