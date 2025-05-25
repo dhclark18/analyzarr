@@ -3,6 +3,9 @@ FROM python:3.11-slim
 WORKDIR /app
 COPY . /app
 
+# make sure start.sh is executable
+RUN chmod +x /app/start.sh
+
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
