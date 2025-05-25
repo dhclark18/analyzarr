@@ -21,7 +21,6 @@ def index():
               key,
               count,
               last_mismatch,
-              flagged_at
             FROM mismatch_tracking
             ORDER BY key;
         """)
