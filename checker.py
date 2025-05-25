@@ -206,12 +206,28 @@ def get_episode_file(file_id: int) -> dict:
 
 
 def delete_file(file_id: int) -> None:
+    timeout = 30
     try:
-        r = SONARR.delete(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=10)
+        # Attempt deletion
+        r = SONARR.delete(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=timeout)
         r.raise_for_status()
         logging.info(f"🗑️ Deleted episode file ID {file_id}")
+        return
+    except requests.exceptions.ReadTimeout:
+        logging.warning(f"Timeout deleting file ID {file_id}; verifying deletion status")
+        # Verify if Sonarr actually deleted the file
+        try:
+            resp = SONARR.get(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=10)
+            if resp.status_code == 404:
+                logging.info(f"🗑️ Deletion of file ID {file_id} confirmed after timeout")
+            else:
+                logging.error(f"❌ File ID {file_id} still present (status {resp.status_code})")
+        except Exception as e:
+            logging.error(f"Error verifying deletion for file ID {file_id}: {e}")
+        return
     except Exception as e:
         logging.error(f"Failed to delete file ID {file_id}: {e}")
+        return
 
 
 def refresh_series(series_id: int) -> None:
@@ -240,11 +256,9 @@ def search_episode(episode_id: int) -> None:
 
 # --- Main Logic ---
 def check_episode(series: dict, episode: dict) -> None:
-    # Skip if no file
     if not episode.get("hasFile") or not episode.get("episodeFileId"):
         return
 
-    # Fetch file metadata
     try:
         epfile = get_episode_file(episode["episodeFileId"])
     except Exception as e:
