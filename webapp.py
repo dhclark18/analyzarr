@@ -20,7 +20,7 @@ def index():
             SELECT
               key,
               count,
-              last_mismatch,
+              last_mismatch
             FROM mismatch_tracking
             ORDER BY key;
         """)
