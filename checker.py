@@ -271,13 +271,13 @@ def check_episode(series: dict, episode: dict) -> None:
         parsed_epnum = episode["episodeNumber"]
 
     series_norm = normalize_title(series["title"])
-    key = f"series::{series_norm}::S{parsed_season:02d}E{parsed_epnum:02d}"
+    #key = f"series::{series_norm}::S{parsed_season:02d}E{parsed_epnum:02d}" old
 
     expected_season = episode["seasonNumber"]
     expected_epnum = episode["episodeNumber"]
     expected = normalize_title(episode["title"])
     actual = normalize_title(scene)
-
+    key = f"series::{series_norm}::S{expected_season:02d}E{expected_epnum:02d}"
     code = f"S{expected_season:02}E{expected_epnum:02}"
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected: {episode['title']}")
