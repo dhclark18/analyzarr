@@ -1,56 +1,49 @@
 {% extends "base.html" %}
 
-{% block title %}All Tables – DB Viewer{% endblock %}
+{% block title %}Episode Tag Report{% endblock %}
 
 {% block content %}
-  <h1 class="mb-4 text-light">Database Contents</h1>
+  <h1 class="mb-4 text-light">Episode Tag Report</h1>
 
-  <div class="accordion" id="dbAccordion">
+  <div class="row row-cols-1 row-cols-md-1 g-4">
     {% for table, rows in all_data.items() %}
-    <div class="accordion-item bg-dark text-light border-secondary">
-      <h2 class="accordion-header" id="heading{{ loop.index }}">
-        <button class="accordion-button collapsed bg-secondary text-light" 
-                type="button" 
-                data-bs-toggle="collapse"
-                data-bs-target="#collapse{{ loop.index }}"
-                aria-expanded="false"
-                aria-controls="collapse{{ loop.index }}">
-          {{ table.replace('_',' ').title() }}
-          <span class="badge bg-light text-dark ms-2">{{ rows|length }}</span>
-        </button>
-      </h2>
-      <div id="collapse{{ loop.index }}" 
-           class="accordion-collapse collapse" 
-           aria-labelledby="heading{{ loop.index }}" 
-           data-bs-parent="#dbAccordion">
-        <div class="accordion-body p-0">
-          {% if rows|length == 0 %}
-            <div class="p-3 text-center text-muted">No rows in {{ table }}.</div>
-          {% else %}
-            <div class="table-responsive">
-              <table class="table table-striped table-dark mb-0">
-                <thead>
-                  <tr>
-                    {% for col in rows[0].keys() %}
-                      <th scope="col">{{ col.replace('_',' ').title() }}</th>
-                    {% endfor %}
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for row in rows %}
+      <div class="col">
+        <div class="card bg-dark text-light h-100 border-secondary">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="h6 mb-0">{{ table }}</span>
+            <span class="badge bg-light text-dark">{{ rows|length }}</span>
+          </div>
+          <div class="card-body p-0">
+            {% if rows|length == 0 %}
+              <div class="p-3 text-center text-muted">
+                <em>No records found.</em>
+              </div>
+            {% else %}
+              <div class="table-responsive">
+                <table class="table table-striped table-dark mb-0">
+                  <thead class="table-primary">
                     <tr>
-                      {% for val in row.values() %}
-                        <td>{{ val }}</td>
+                      {# These headers will be exactly "Series", "Code", "Tags" #}
+                      {% for col in rows[0].keys() %}
+                        <th scope="col">{{ col }}</th>
                       {% endfor %}
                     </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          {% endif %}
+                  </thead>
+                  <tbody>
+                    {% for row in rows %}
+                      <tr>
+                        <td>{{ row.series }}</td>
+                        <td>{{ row.code }}</td>
+                        <td>{{ row.tags }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+          </div>
         </div>
       </div>
-    </div>
     {% endfor %}
   </div>
 {% endblock %}
