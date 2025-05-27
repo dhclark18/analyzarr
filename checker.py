@@ -28,19 +28,19 @@ logging.basicConfig(
 )
 
 # --- Config ---
-SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
-SONARR_API_KEY = os.getenv("SONARR_API_KEY")
+SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
+SONARR_API_KEY     = os.getenv("SONARR_API_KEY")
 if not SONARR_API_KEY:
     logging.error("❌ SONARR_API_KEY not set.")
     sys.exit(1)
 SONARR = requests.Session()
 SONARR.headers.update({"X-Api-Key": SONARR_API_KEY})
 
-TVDB_FILTER = os.getenv("TVDB_ID")
-FORCE_RUN = os.getenv("FR_RUN", "false").lower() == "true"
-SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
+TVDB_FILTER        = os.getenv("TVDB_ID")
+FORCE_RUN          = os.getenv("FR_RUN", "false").lower() == "true"
+SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "5"))
-MISMATCH_TTL_DAYS = int(os.getenv("MISMATCH_TTL_DAYS", "30"))
+MISMATCH_TTL_DAYS  = int(os.getenv("MISMATCH_TTL_DAYS", "30"))
 
 # Optional season filter
 _raw = os.getenv("SEASON_FILTER")
@@ -70,21 +70,24 @@ def init_db():
     """
     ddl_ep_tags = """
     CREATE TABLE IF NOT EXISTS episode_tags (
-      key     TEXT NOT NULL
-                REFERENCES mismatch_tracking(key)
-                ON DELETE CASCADE,
-      tag_id  INTEGER NOT NULL
-                REFERENCES tags(id)
-                ON DELETE CASCADE,
-      code    TEXT NOT NULL,
+      key           TEXT NOT NULL REFERENCES mismatch_tracking(key) ON DELETE CASCADE,
+      tag_id        INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+      code          TEXT NOT NULL,
+      series_title  TEXT NOT NULL,
       PRIMARY KEY (key, tag_id)
     );
     """
+    alter_ep_tags = """
+    ALTER TABLE episode_tags
+      ADD COLUMN IF NOT EXISTS series_title TEXT NOT NULL DEFAULT '';
+    """
+
     with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
         with conn.cursor() as cur:
             cur.execute(ddl_mismatch)
             cur.execute(ddl_tags)
             cur.execute(ddl_ep_tags)
+            cur.execute(alter_ep_tags)
         conn.commit()
 
 # --- Mismatch Count ---
@@ -98,7 +101,6 @@ def get_mismatch_count(key: str) -> int:
     except Exception as e:
         logging.error(f"DB error fetching mismatch count for {key}: {e}")
         return 0
-
 
 def delete_mismatch_record(key: str) -> None:
     try:
@@ -120,8 +122,7 @@ def ensure_tag(conn, tag_name: str) -> int:
         cur.execute("SELECT id FROM tags WHERE name = %s", (tag_name,))
         return cur.fetchone()[0]
 
-
-def add_tag(key: str, tag_name: str, code: str) -> None:
+def add_tag(key: str, tag_name: str, code: str, series_title: str) -> None:
     """
     Add a tag for this key and episode code (e.g., S01E02).
     """
@@ -131,22 +132,22 @@ def add_tag(key: str, tag_name: str, code: str) -> None:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO episode_tags (key, tag_id, code)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO episode_tags (key, tag_id, code, series_title)
+                    VALUES (%s, %s, %s, %s)
                     ON CONFLICT (key, tag_id) DO NOTHING
                     """,
-                    (key, tag_id, code)
+                    (key, tag_id, code, series_title)
                 )
                 inserted = cur.rowcount
             conn.commit()
         if inserted:
-            logging.info(f"🏷️ Tagged {key} {code} with '{tag_name}'")
+            logging.info(f"🏷️ Tagged {key} {code} with '{tag_name}' ({series_title})")
         else:
             logging.debug(f"⚠️ Episode {key} already tagged with '{tag_name}'")
     except Exception as e:
         logging.error(f"DB error adding tag '{tag_name}' to {key} {code}: {e}")
 
-def remove_tag(key: str, tag_name: str, code: str) -> None:
+def remove_tag(key: str, tag_name: str, code: str, series_title: str) -> None:
     """
     Remove the tag for this key and episode code (e.g., S01E02).
     """
@@ -157,15 +158,16 @@ def remove_tag(key: str, tag_name: str, code: str) -> None:
                     """
                     DELETE FROM episode_tags et
                       USING tags t
-                     WHERE et.tag_id = t.id
-                       AND et.key   = %s
-                       AND t.name   = %s
-                       AND et.code  = %s
+                     WHERE et.tag_id       = t.id
+                       AND et.key          = %s
+                       AND t.name          = %s
+                       AND et.code         = %s
+                       AND et.series_title = %s
                     """,
-                    (key, tag_name, code)
+                    (key, tag_name, code, series_title)
                 )
             conn.commit()
-        logging.info(f"❎ Removed tag '{tag_name}' for {key} {code}")
+        logging.info(f"❎ Removed tag '{tag_name}' for {key} {code} ({series_title})")
     except Exception as e:
         logging.error(f"DB error removing tag '{tag_name}' from {key} {code}: {e}")
 
@@ -177,36 +179,28 @@ def normalize_title(text: str) -> str:
     text = unicodedata.normalize("NFKD", text)
     return "".join(c for c in text if c.isalnum()).lower()
 
-
 def get_series_list() -> list:
     r = SONARR.get(f"{SONARR_URL}/api/v3/series", timeout=10)
     r.raise_for_status()
     return r.json()
-
 
 def get_episodes(series_id: int) -> list:
     r = SONARR.get(f"{SONARR_URL}/api/v3/episode?seriesId={series_id}", timeout=10)
     r.raise_for_status()
     return r.json()
 
-
 def get_episode_file(file_id: int) -> dict:
     r = SONARR.get(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=10)
     r.raise_for_status()
     return r.json()
 
-
 def delete_file(file_id: int) -> None:
-    timeout = 30
     try:
-        # Attempt deletion
-        r = SONARR.delete(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=timeout)
+        r = SONARR.delete(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=30)
         r.raise_for_status()
         logging.info(f"🗑️ Deleted episode file ID {file_id}")
-        return
     except requests.exceptions.ReadTimeout:
         logging.warning(f"Timeout deleting file ID {file_id}; verifying deletion status")
-        # Verify if Sonarr actually deleted the file
         try:
             resp = SONARR.get(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=10)
             if resp.status_code == 404:
@@ -215,11 +209,8 @@ def delete_file(file_id: int) -> None:
                 logging.error(f"❌ File ID {file_id} still present (status {resp.status_code})")
         except Exception as e:
             logging.error(f"Error verifying deletion for file ID {file_id}: {e}")
-        return
     except Exception as e:
         logging.error(f"Failed to delete file ID {file_id}: {e}")
-        return
-
 
 def refresh_series(series_id: int) -> None:
     for cmd in ("RefreshSeries", "RescanSeries"):
@@ -232,7 +223,6 @@ def refresh_series(series_id: int) -> None:
         except Exception as e:
             logging.error(f"Failed to {cmd} for series {series_id}: {e}")
     logging.info(f"🔄 Refreshed series ID {series_id}")
-
 
 def search_episode(episode_id: int) -> None:
     try:
@@ -268,26 +258,27 @@ def check_episode(series: dict, episode: dict) -> None:
         parsed_epnum = episode["episodeNumber"]
 
     series_norm = normalize_title(series["title"])
-    #key = f"series::{series_norm}::S{parsed_season:02d}E{parsed_epnum:02d}" old
-
     expected_season = episode["seasonNumber"]
-    expected_epnum = episode["episodeNumber"]
-    expected = normalize_title(episode["title"])
-    actual = normalize_title(scene)
-    key = f"series::{series_norm}::S{expected_season:02d}E{expected_epnum:02d}"
-    code = f"S{expected_season:02}E{expected_epnum:02}"
+    expected_epnum  = episode["episodeNumber"]
+    expected        = normalize_title(episode["title"])
+    actual          = normalize_title(scene)
+    key             = f"series::{series_norm}::S{expected_season:02d}E{expected_epnum:02d}"
+    code            = f"S{expected_season:02}E{expected_epnum:02}"
+    # Pull the nice series title from Sonarr metadata:
+    nice_title      = series.get("cleanTitle") or series["title"]
+
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected: {episode['title']}")
     logging.info(f"🎞️ Scene:    {scene}")
 
     if expected in actual:
-        remove_tag(key, SPECIAL_TAG_NAME, code)
+        remove_tag(key, SPECIAL_TAG_NAME, code, nice_title)
         logging.info(f"✅ Match for {series['title']} {code}; tag removed")
         return
 
     cnt = get_mismatch_count(key)
     if cnt >= MISMATCH_THRESHOLD:
-        add_tag(key, SPECIAL_TAG_NAME, code)
+        add_tag(key, SPECIAL_TAG_NAME, code, nice_title)
         logging.info(f"⏩ Threshold reached ({cnt}) → tagged {series['title']} {code}")
         return
 
@@ -299,7 +290,6 @@ def check_episode(series: dict, episode: dict) -> None:
     delete_file(epfile.get("id"))
     refresh_series(series.get("id"))
     search_episode(episode.get("id"))
-
 
 def scan_library() -> None:
     for s in get_series_list():
@@ -315,7 +305,6 @@ def scan_library() -> None:
                 check_episode(s, ep)
             except Exception as e:
                 logging.error(f"Fatal error checking {s['title']} ep {ep.get('id')}: {e}")
-
 
 if __name__ == "__main__":
     init_db()
