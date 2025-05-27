@@ -249,7 +249,14 @@ def check_episode(series: dict, episode: dict) -> None:
         )
         return
 
-    scene = epfile.get("sceneName") or ""
+    # first try Sonarr's sceneName, then fall back to the recorded file name
+    raw = (
+        epfile.get("sceneName")
+        or epfile.get("relativePath")
+        or epfile.get("path")
+        or ""
+    )
+    scene = os.path.basename(raw)
     m = re.search(r"[sS](\d{2})[eE](\d{2})", scene)
     if m:
         parsed_season, parsed_epnum = map(int, m.groups())
