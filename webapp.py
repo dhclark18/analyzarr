@@ -37,7 +37,7 @@ def index():
             SELECT
               series_title AS series,
               code,
-              COALESCE(string_agg(tag, ', ' ORDER BY tag), '') AS tags
+              COALESCE(string_agg(tag_id, ', ' ORDER BY tag_id), '') AS tags
             FROM episode_tags
             GROUP BY series_title, code
             ORDER BY series_title, code;
