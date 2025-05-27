@@ -264,8 +264,8 @@ def check_episode(series: dict, episode: dict) -> None:
     actual          = normalize_title(scene)
     key             = f"series::{series_norm}::S{expected_season:02d}E{expected_epnum:02d}"
     code            = f"S{expected_season:02}E{expected_epnum:02}"
-    # Pull the nice series title from Sonarr metadata:
-    nice_title      = series.get("cleanTitle") or series["title"]
+    # use Sonarr’s original, nicely-formatted title
+    nice_title = series["title"]
 
     logging.info(f"\n📺 {series['title']} {code}")
     logging.info(f"🎯 Expected: {episode['title']}")
