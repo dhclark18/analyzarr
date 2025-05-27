@@ -39,7 +39,7 @@ def index():
               COALESCE(string_agg(t.name, ', ' ORDER BY t.name), '') AS Tags
             FROM episode_tags et
             JOIN tags t  ON et.tag_id = t.id
-            JOIN problematic_episodes pe ON et.episode_file_id = pe.episode_file_id
+            JOIN episode_tags pe ON et.episode_file_id = pe.episode_file_id
             GROUP BY pe.series_title, pe.code
             ORDER BY pe.series_title, pe.code;
         """)
