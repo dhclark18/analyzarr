@@ -4,6 +4,8 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
+
+# Make sure this points at your Postgres instance
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
@@ -15,25 +17,24 @@ def index():
     with conn.cursor() as cur:
         cur.execute("""
             SELECT
-              pe.series_title   AS Series,
-              pe.code           AS Code,
-              COALESCE(string_agg(t.name, ', ' ORDER BY t.name), '')
-                                 AS Tags
-            FROM problematic_episodes pe
-            JOIN mismatch_tracking mt   ON pe.key = mt.key
-            LEFT JOIN episode_tags et   ON pe.episode_file_id = et.episode_file_id
-            LEFT JOIN tags t            ON et.tag_id = t.id
-            GROUP BY pe.series_title, pe.code
-            ORDER BY pe.series_title, pe.code;
+              et.series_title   AS series,
+              et.code           AS code,
+              COALESCE(
+                string_agg(t.name, ', ' ORDER BY t.name),
+              '')               AS tags
+            FROM episode_tags et
+            JOIN tags t
+              ON et.tag_id = t.id
+            GROUP BY
+              et.series_title,
+              et.code
+            ORDER BY
+              et.series_title,
+              et.code;
         """)
         rows = cur.fetchall()
     conn.close()
-
-    # all_data now just has one entry, so the card-grid
-    # will render one card titled "Episode Tag Report"
-    return render_template("index.html", all_data={
-        "Episode Tag Report": rows
-    })
+    return render_template("index.html", rows=rows)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
