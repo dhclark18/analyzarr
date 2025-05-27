@@ -126,18 +126,16 @@ def add_tag(key: str, tag_name: str, code: str) -> None:
     Add a tag for this key and episode code (e.g., S01E02).
     """
     try:
-        season = int(code[1:3])
-        episode = int(code[4:6])
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
             tag_id = ensure_tag(conn, tag_name)
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO episode_tags (key, tag_id, season, episode)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO episode_tags (key, tag_id, code)
+                    VALUES (%s, %s, %s)
                     ON CONFLICT (key, tag_id) DO NOTHING
                     """,
-                    (key, tag_id, season, episode)
+                    (key, tag_id, code)
                 )
                 inserted = cur.rowcount
             conn.commit()
@@ -160,10 +158,9 @@ def remove_tag(key: str, tag_name: str, code: str) -> None:
                     DELETE FROM episode_tags et
                       USING tags t
                      WHERE et.tag_id = t.id
-                       AND et.key = %s
-                       AND t.name = %s
-                       AND CONCAT('S', LPAD(CAST(et.season AS TEXT), 2, '0'),
-                                  'E', LPAD(CAST(et.episode AS TEXT), 2, '0')) = %s
+                       AND et.key   = %s
+                       AND t.name   = %s
+                       AND et.code  = %s
                     """,
                     (key, tag_name, code)
                 )
