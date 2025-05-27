@@ -39,7 +39,7 @@ SONARR.headers.update({"X-Api-Key": SONARR_API_KEY})
 TVDB_FILTER = os.getenv("TVDB_ID")
 FORCE_RUN = os.getenv("FR_RUN", "false").lower() == "true"
 SPECIAL_TAG_NAME = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
-MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "10"))
+MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "5"))
 MISMATCH_TTL_DAYS = int(os.getenv("MISMATCH_TTL_DAYS", "30"))
 
 # Optional season filter
