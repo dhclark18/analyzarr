@@ -21,8 +21,8 @@ This Docker-based tool verifies that downloaded TV episode filenames match offic
 2. Set up Sabnzbd to use script as a prequeue script.
 3. Build custom Sabznbd so it has psycopg2.
 4. Create new docker stack using provided docker-compose.yml and modify variables as needed.
-5. Run container for first time
-6. Restart container (issue with database not being initialized on first run)
+5. Run stack for first time
+6. Restart stack (issue with database not being initialized on first run)
 7. Go to http://[your ip address]:5000 to see problematic episodes.
 8. Enjoy. I recommend trying it out on one season in a series since this could trigger a large deletion and download if ran on entire library.
 
