@@ -271,6 +271,8 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     if expected_norm in actual_norm:
         if remove_tag(key, SPECIAL_TAG_NAME, code, nice):
             logging.info(f"✅ Match for {nice} {code}; tag removed")
+        else: 
+            logging.info(f"✅ Match for {nice} {code}; no tag to remove")
         return
 
     # On mismatch: fetch external count using the parsed key
