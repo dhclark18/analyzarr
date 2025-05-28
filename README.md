@@ -4,7 +4,7 @@ This Docker-based tool verifies that downloaded filenames match official titles 
 
 ## Features
 
-- Auto-checks TV episode filenames against TVDb
+- Auto-checks episode filenames against TVDb
 - Attempts 3 times to find nzb with correct title. Afterwards it flags the episode as problematic and just requests the nzb release with the highest custom format. Once an episode is flagged as problematic it won't be tocuhed by the matching software.
 - Creates database of problematic episodes for you to manually intervene.
 - Uses database to create webpage depicting all the tv series in your library and which ones have problematic episodes.
