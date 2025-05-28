@@ -31,12 +31,28 @@ def fetch_sonarr_series():
 
 @app.route("/")
 def index():
+    # 1) Get your Sonarr library
     try:
         library_rows = fetch_sonarr_series()
     except Exception as e:
         library_rows = [{"Title": f"Error: {e}", "Seasons": "", "Monitored": ""}]
 
-    # no more report_rows, no all_data
+    # 2) Find which series have tags in your DB
+    conn = get_db_connection()
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT series_title
+              FROM episode_tags;
+        """)
+        problem_titles = { r["series_title"] for r in cur.fetchall() }
+    conn.close()
+
+    # 3) Annotate each library row
+    for row in library_rows:
+        # True if this series has any problematic episodes
+        row["has_problems"] = row["Title"] in problem_titles
+
+    # 4) Render only the library cards
     return render_template("index.html", library_rows=library_rows)
 
 @app.route("/series/<path:series_name>/tag/<int:tag_id>")
