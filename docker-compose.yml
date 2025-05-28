@@ -5,7 +5,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      SONARR_URL: http://[sonarr_url]:8989
+      SONARR_URL: http://[sonarr_ip]:8989
       SONARR_API_KEY: [sonarr api key]
       CHECK_COOLDOWN: 5                     # in seconds
       FR_RUN: true                          # force run to delete any mismatched episodes that don't cross threshold, set to false to just see what episodes are flagged as mismatching
