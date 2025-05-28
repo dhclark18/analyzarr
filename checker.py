@@ -338,7 +338,7 @@ def check_episode(series: dict, episode: dict) -> None:
             except Exception as e:
                 logging.error(f"Failed to grab best release for {series['title']} {code}: {e}")
         else:
-            logging.debug(f"⏩ Already tagged {series['title']} {code}; skipping grab")
+            logging.info(f"⏩ Already tagged {series['title']} {code}; skipping grab")
         return
 
     logging.error(f"❌ Mismatch for {code} (count={cnt})")
