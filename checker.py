@@ -1,272 +1,233 @@
 #!/usr/bin/env python3
+"""
+
+Features:
+ - Pooled PostgreSQL connections (psycopg2 SimpleConnectionPool)
+ - Modular SonarrClient with unified error handling
+ - Reads mismatch counts from an external incrementer script
+ - Tags & auto-grabs when count ≥ threshold, using keys derived from sceneName
+ - Optional force-run to delete and requeue instead of tagging
+"""
+
 import os
-import re
 import sys
-import requests
+import re
+import time
 import logging
 import unicodedata
-import psycopg2
-from datetime import datetime, timedelta
-import time
-from typing import Any, Dict
+import argparse
 
-# --- Validate environment ---
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    print("❌ DATABASE_URL not set.", file=sys.stderr)
-    sys.exit(1)
+import requests
+from psycopg2.pool import SimpleConnectionPool
 
-# --- Logging Setup ---
+# -----------------------------------------------------------------------------
+# CLI & Configuration
+# -----------------------------------------------------------------------------
+
+parser = argparse.ArgumentParser(description="Huntarr: Sonarr mismatch checker")
+parser.add_argument(
+    "--force-run",
+    action="store_true",
+    help="On mismatch, delete and requeue instead of tagging"
+)
+args = parser.parse_args()
+
+DATABASE_URL       = os.getenv("DATABASE_URL") or sys.exit("❌ DATABASE_URL not set")
+SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989")
+SONARR_API_KEY     = os.getenv("SONARR_API_KEY") or sys.exit("❌ SONARR_API_KEY not set")
+API_TIMEOUT        = int(os.getenv("API_TIMEOUT", "10"))
+VERIFY_SSL         = os.getenv("VERIFY_SSL", "true").lower() in ("1", "true", "yes")
+
+TVDB_FILTER        = os.getenv("TVDB_ID")
+SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
+MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "5"))
+
+_raw = os.getenv("SEASON_FILTER", "")
+if _raw:
+    try:
+        SEASON_FILTER = {int(x.strip()) for x in _raw.split(",")}
+    except ValueError:
+        logging.warning(f"Ignoring invalid SEASON_FILTER='{_raw}'")
+        SEASON_FILTER = set()
+else:
+    SEASON_FILTER = set()
+
+# -----------------------------------------------------------------------------
+# Logging Setup
+# -----------------------------------------------------------------------------
+
 LOG_DIR = os.getenv("LOG_PATH", "/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "scene_check.log")
+LOG_FILE = os.path.join(LOG_DIR, "huntarr.log")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding="utf-8"),
-        logging.StreamHandler()
+        logging.StreamHandler(sys.stdout)
     ]
 )
 
-# --- Config ---
-SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989").rstrip("/")
-SONARR_API_KEY     = os.getenv("SONARR_API_KEY")
-if not SONARR_API_KEY:
-    logging.error("❌ SONARR_API_KEY not set.")
-    sys.exit(1)
-SONARR = requests.Session()
-SONARR.headers.update({"X-Api-Key": SONARR_API_KEY})
+# -----------------------------------------------------------------------------
+# Database Connection Pool
+# -----------------------------------------------------------------------------
 
-TVDB_FILTER        = os.getenv("TVDB_ID")
-FORCE_RUN          = os.getenv("FR_RUN", "false").lower() == "true"
-SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
-MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "5"))
-MISMATCH_TTL_DAYS  = int(os.getenv("MISMATCH_TTL_DAYS", "30"))
+db_pool = SimpleConnectionPool(minconn=1, maxconn=10, dsn=DATABASE_URL)
 
-# Optional season filter
-_raw = os.getenv("SEASON_FILTER")
-if _raw:
-    try:
-        SEASON_FILTER = [int(x.strip()) for x in _raw.split(",")]
-    except ValueError:
-        logging.warning(f"Invalid SEASON_FILTER '{_raw}', ignoring.")
-        SEASON_FILTER = None
-else:
-    SEASON_FILTER = None
+def with_conn(fn):
+    """Decorator: borrow a conn from the pool, return it when done."""
+    def wrapper(*args, **kwargs):
+        conn = db_pool.getconn()
+        try:
+            return fn(conn, *args, **kwargs)
+        finally:
+            db_pool.putconn(conn)
+    return wrapper
 
-# --- DB Init & Maintenance ---
-def init_db():
-    ddl_mismatch = """
-    CREATE TABLE IF NOT EXISTS mismatch_tracking (
-      key           TEXT PRIMARY KEY,
-      count         INTEGER NOT NULL DEFAULT 0,
-      last_mismatch TIMESTAMP
-    );
+# -----------------------------------------------------------------------------
+# Schema Initialization
+# -----------------------------------------------------------------------------
+
+@with_conn
+def init_db(conn):
     """
-    ddl_tags = """
-    CREATE TABLE IF NOT EXISTS tags (
-      id   SERIAL PRIMARY KEY,
-      name TEXT   UNIQUE NOT NULL
-    );
+    Ensure only the tagging tables exist; mismatch counts are managed externally.
     """
-    ddl_ep_tags = """
-    CREATE TABLE IF NOT EXISTS episode_tags (
-      key           TEXT NOT NULL REFERENCES mismatch_tracking(key) ON DELETE CASCADE,
-      tag_id        INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-      code          TEXT NOT NULL,
-      series_title  TEXT NOT NULL,
-      PRIMARY KEY (key, tag_id)
-    );
-    """
-    alter_ep_tags = """
-    ALTER TABLE episode_tags
-      ADD COLUMN IF NOT EXISTS series_title TEXT NOT NULL DEFAULT '';
-    """
+    ddl = [
+        """
+        CREATE TABLE IF NOT EXISTS tags (
+          id   SERIAL PRIMARY KEY,
+          name TEXT   UNIQUE NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS episode_tags (
+          key           TEXT NOT NULL,
+          tag_id        INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+          code          TEXT NOT NULL,
+          series_title  TEXT NOT NULL,
+          PRIMARY KEY (key, tag_id)
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS mismatch_tracking (
+          key           TEXT PRIMARY KEY,
+          count         INTEGER NOT NULL DEFAULT 0,
+          last_mismatch TIMESTAMP
+        );
+        """,
+    ]
+    with conn.cursor() as cur:
+        for stmt in ddl:
+            cur.execute(stmt)
+    conn.commit()
+    logging.info("✅ Database schema (tags) ensured")
 
-    with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
-        with conn.cursor() as cur:
-            cur.execute(ddl_mismatch)
-            cur.execute(ddl_tags)
-            cur.execute(ddl_ep_tags)
-            cur.execute(alter_ep_tags)
-        conn.commit()
+# -----------------------------------------------------------------------------
+# Mismatch Count Reader
+# -----------------------------------------------------------------------------
 
-# --- Mismatch Count ---
-def get_mismatch_count(key: str) -> int:
-    try:
-        with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT count FROM mismatch_tracking WHERE key = %s", (key,))
-                row = cur.fetchone()
-        return row[0] if row else 0
-    except Exception as e:
-        logging.error(f"DB error fetching mismatch count for {key}: {e}")
-        return 0
+@with_conn
+def get_mismatch_count(conn, key: str) -> int:
+    """Read the pre-incremented mismatch count for this key."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT count FROM mismatch_tracking WHERE key = %s", (key,))
+        row = cur.fetchone()
+    return row[0] if row else 0
 
-def delete_mismatch_record(key: str) -> None:
-    try:
-        with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM mismatch_tracking WHERE key = %s", (key,))
-            conn.commit()
-        logging.info(f"🗑️ Deleted mismatch record for {key}")
-    except Exception as e:
-        logging.error(f"DB error deleting mismatch record {key}: {e}")
+# -----------------------------------------------------------------------------
+# Tag Helpers
+# -----------------------------------------------------------------------------
 
-# --- Tag Helpers ---
-def ensure_tag(conn, tag_name: str) -> int:
+@with_conn
+def ensure_tag(conn, name: str) -> int:
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO tags (name) VALUES (%s) ON CONFLICT DO NOTHING",
-            (tag_name,)
+            (name,)
         )
-        cur.execute("SELECT id FROM tags WHERE name = %s", (tag_name,))
+        cur.execute("SELECT id FROM tags WHERE name = %s", (name,))
         return cur.fetchone()[0]
 
-def add_tag(key: str, tag_name: str, code: str, series_title: str) -> bool:
-    """
-    Add a tag for this key and episode code (e.g., S01E02).
-    Returns True if the tag was newly inserted, False if it already existed.
-    """
-    try:
-        with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
-            tag_id = ensure_tag(conn, tag_name)
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO episode_tags (key, tag_id, code, series_title)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (key, tag_id) DO NOTHING
-                    """,
-                    (key, tag_id, code, series_title)
-                )
-                inserted = cur.rowcount  # 1 if inserted, 0 if skipped
-            conn.commit()
+@with_conn
+def add_tag(conn, key: str, tag_name: str, code: str, series_title: str) -> bool:
+    tag_id = ensure_tag(conn, tag_name)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO episode_tags (key, tag_id, code, series_title)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (key, tag_id) DO NOTHING
+            """,
+            (key, tag_id, code, series_title)
+        )
+        inserted = cur.rowcount == 1
+    conn.commit()
+    return inserted
 
-        if inserted:
-            logging.info(f"🏷️ Tagged {key} {code} with '{tag_name}' ({series_title})")
-            return True
-        else:
-            logging.debug(f"⚠️ Episode {key} already tagged with '{tag_name}'")
-            return False
+@with_conn
+def remove_tag(conn, key: str, tag_name: str, code: str, series_title: str) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM episode_tags et
+              USING tags t
+             WHERE et.tag_id       = t.id
+               AND et.key          = %s
+               AND t.name          = %s
+               AND et.code         = %s
+               AND et.series_title = %s
+            """,
+            (key, tag_name, code, series_title)
+        )
+        deleted = cur.rowcount == 1
+    conn.commit()
+    return deleted
 
-    except Exception as e:
-        logging.error(f"DB error adding tag '{tag_name}' to {key} {code}: {e}")
-        return False
+# -----------------------------------------------------------------------------
+# Sonarr API Client
+# -----------------------------------------------------------------------------
 
-def remove_tag(key: str, tag_name: str, code: str, series_title: str) -> None:
-    """
-    Remove the tag for this key and episode code (e.g., S01E02).
-    """
-    try:
-        with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    DELETE FROM episode_tags et
-                      USING tags t
-                     WHERE et.tag_id       = t.id
-                       AND et.key          = %s
-                       AND t.name          = %s
-                       AND et.code         = %s
-                       AND et.series_title = %s
-                    """,
-                    (key, tag_name, code, series_title)
-                )
-            conn.commit()
-        logging.info(f"❎ Removed tag '{tag_name}' for {key} {code} ({series_title})")
-    except Exception as e:
-        logging.error(f"DB error removing tag '{tag_name}' from {key} {code}: {e}")
-
-# --- Utils & Sonarr API ---
-def arr_request(api_url: str, api_key: str, api_timeout: int, endpoint: str, method: str = "GET", data: Dict = None) -> Any:
-    """
-    Make a request to the Sonarr API.
-    
-    Args:
-        api_url: The base URL of the Sonarr API
-        api_key: The API key for authentication
-        api_timeout: Timeout for the API request
-        endpoint: The API endpoint to call
-        method: HTTP method (GET, POST, PUT, DELETE)
-        data: Optional data payload for POST/PUT requests
-    
-    Returns:
-        The parsed JSON response or None if the request failed
-    """
-    try:
-        if not api_url or not api_key:
-            logging.error("No URL or API key provided")
-            return None
-        
-        # Ensure api_url has a scheme
-        if not (api_url.startswith('http://') or api_url.startswith('https://')):
-            logging.error(f"Invalid URL format: {api_url} - URL must start with http:// or https://")
-            return None
-            
-        # Construct the full URL properly
-        full_url = f"{api_url.rstrip('/')}/api/v3/{endpoint.lstrip('/')}"
-        
-        logging.debug(f"Making {method} request to: {full_url}")
-        
-        # Set up headers with User-Agent to identify Huntarr
-        headers = {
+class SonarrClient:
+    def __init__(self, base_url, api_key, timeout=10, verify_ssl=True):
+        self.base_url   = base_url.rstrip("/")
+        self.timeout    = timeout
+        self.verify_ssl = verify_ssl
+        self.session    = requests.Session()
+        self.session.headers.update({
             "X-Api-Key": api_key,
-            "Content-Type": "application/json",
-            "User-Agent": "Huntarr/1.0 (https://github.com/plexguide/Huntarr.io)"
-        }
-        
-        # Log the User-Agent for debugging
-        logging.debug(f"Using User-Agent: {headers['User-Agent']}")
-        
+            "User-Agent": "Huntarr/1.0 (+https://github.com/plexguide/Huntarr)"
+        })
+
+    def request(self, endpoint, method="GET", json_data=None):
+        url = f"{self.base_url}/api/v3/{endpoint.lstrip('/')}"
         try:
-            if method.upper() == "GET":
-                response = session.get(full_url, headers=headers, timeout=api_timeout, verify=verify_ssl)
-            elif method.upper() == "POST":
-                response = session.post(full_url, headers=headers, json=data, timeout=api_timeout, verify=verify_ssl)
-            elif method.upper() == "PUT":
-                response = session.put(full_url, headers=headers, json=data, timeout=api_timeout, verify=verify_ssl)
-            elif method.upper() == "DELETE":
-                response = session.delete(full_url, headers=headers, timeout=api_timeout, verify=verify_ssl)
-            else:
-                logging.error(f"Unsupported HTTP method: {method}")
-                return None
-            
-            # Check for successful response
-            response.raise_for_status()
-            
-            # Check if there's any content before trying to parse JSON
-            if response.content:
-                try:
-                    return response.json()
-                except json.JSONDecodeError as jde:
-                    # Log detailed information about the malformed response
-                    logging.error(f"Error decoding JSON response from {endpoint}: {str(jde)}")
-                    logging.error(f"Response status code: {response.status_code}")
-                    logging.error(f"Response content (first 200 chars): {response.content[:200]}")
-                    return None
-            else:
-                logging.debug(f"Empty response content from {endpoint}, returning empty dict")
-                return {}
-                
-        except requests.exceptions.RequestException as e:
-            # Add detailed error logging
-            error_details = str(e)
-            if hasattr(e, 'response') and e.response is not None:
-                error_details += f", Status Code: {e.response.status_code}"
-                if e.response.content:
-                    error_details += f", Content: {e.response.content[:200]}"
-            
-            logging.error(f"Error during {method} request to {endpoint}: {error_details}")
+            resp = self.session.request(
+                method, url,
+                json=json_data,
+                timeout=self.timeout,
+                verify=self.verify_ssl
+            )
+            resp.raise_for_status()
+            return resp.json() if resp.content else {}
+        except Exception:
+            logging.exception(f"🚨 Sonarr API error on {method} {endpoint}")
             return None
-    except Exception as e:
-        # Catch all exceptions and log them with traceback
-        error_msg = f"CRITICAL ERROR in arr_request: {str(e)}"
-        logging.error(error_msg)
-        logging.error(f"Full traceback: {traceback.format_exc()}")
-        return None
-        
+
+    def get(self, endpoint):
+        return self.request(endpoint, "GET")
+
+    def post(self, endpoint, data=None):
+        return self.request(endpoint, "POST", json_data=data)
+
+    def delete(self, endpoint):
+        return self.request(endpoint, "DELETE")
+
+# -----------------------------------------------------------------------------
+# Utility
+# -----------------------------------------------------------------------------
+
 def normalize_title(text: str) -> str:
     if not text:
         return ""
@@ -274,208 +235,137 @@ def normalize_title(text: str) -> str:
     text = unicodedata.normalize("NFKD", text)
     return "".join(c for c in text if c.isalnum()).lower()
 
-def get_series_list() -> list:
-    r = SONARR.get(f"{SONARR_URL}/api/v3/series", timeout=10)
-    r.raise_for_status()
-    return r.json()
+# -----------------------------------------------------------------------------
+# Core Logic
+# -----------------------------------------------------------------------------
 
-def get_episodes(series_id: int) -> list:
-    r = SONARR.get(f"{SONARR_URL}/api/v3/episode?seriesId={series_id}", timeout=10)
-    r.raise_for_status()
-    return r.json()
-
-def get_episode_file(file_id: int) -> dict:
-    r = SONARR.get(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=10)
-    r.raise_for_status()
-    return r.json()
-
-def delete_file(file_id: int) -> None:
-    try:
-        r = SONARR.delete(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=30)
-        r.raise_for_status()
-        logging.info(f"🗑️ Deleted episode file ID {file_id}")
-    except requests.exceptions.ReadTimeout:
-        logging.warning(f"Timeout deleting file ID {file_id}; verifying deletion status")
-        try:
-            resp = SONARR.get(f"{SONARR_URL}/api/v3/episodefile/{file_id}", timeout=10)
-            if resp.status_code == 404:
-                logging.info(f"🗑️ Deletion of file ID {file_id} confirmed after timeout")
-            else:
-                logging.error(f"❌ File ID {file_id} still present (status {resp.status_code})")
-        except Exception as e:
-            logging.error(f"Error verifying deletion for file ID {file_id}: {e}")
-    except Exception as e:
-        logging.error(f"Failed to delete file ID {file_id}: {e}")
-
-def refresh_series(series_id: int) -> None:
-    for cmd in ("RefreshSeries", "RescanSeries"):
-        try:
-            SONARR.post(
-                f"{SONARR_URL}/api/v3/command",
-                json={"name": cmd, "seriesId": series_id},
-                timeout=10
-            ).raise_for_status()
-        except Exception as e:
-            logging.error(f"Failed to {cmd} for series {series_id}: {e}")
-    logging.info(f"🔄 Refreshed series ID {series_id}")
-
-def search_episode(episode_id: int) -> None:
-    try:
-        SONARR.post(
-            f"{SONARR_URL}/api/v3/command",
-            json={"name": "EpisodeSearch", "episodeIds": [episode_id]},
-            timeout=10
-        ).raise_for_status()
-        logging.info(f"🔍 Searched for episode ID {episode_id}")
-    except Exception as e:
-        logging.error(f"Failed to search for episode {episode_id}: {e}")
-
-def grab_best_nzb(api_url: str, api_key: str,
-                 api_timeout: int, series_id: int,
-                 episode_id: int, wait: int = 5):
-    # 1) fire off the search
-    cmd = arr_request(
-        api_url, api_key, api_timeout,
-        "command",
-        method="POST",
-        data={"name": "EpisodeSearch", "episodeIds": [episode_id]}
-    )
-    if not cmd or "id" not in cmd:
-        log.error("Failed to start EpisodeSearch")
-        return
-    cmd_id = cmd["id"]
-    log.info(f"🔍 EpisodeSearch started (id={cmd_id}) for ep {episode_id}")
-
-    # 2) wait for Sonarr to finish collecting results
-    time.sleep(wait)
-
-    # 3) fetch ONLY that episode’s releases
-    #    note the singular param `episodeId`
-    releases = arr_request(
-        api_url, api_key, api_timeout,
-        f"release?episodeId={episode_id}"
-    ) or []
-
-    # 4) pick best by customFormatScore
-    filtered = [r for r in releases if r.get("seriesId") == series_id]
-    if not filtered:
-        log.warning(f"No releases found for S{series_id}/{episode_id}")
+def check_episode(client: SonarrClient, series: dict, ep: dict):
+    if not ep.get("hasFile") or not ep.get("episodeFileId"):
         return
 
-    best = max(filtered, key=lambda r: r.get("customFormatScore", 0))
-    dl_url      = best.get("downloadUrl")
-    title       = best.get("title")
-    protocol    = best.get("protocol")
-    publishDate = best.get("publishDate")
-
-    if not dl_url:
-        log.error("Found best release but no downloadUrl present")
+    epfile = client.get(f"episodefile/{ep['episodeFileId']}")
+    if epfile is None:
+        logging.error(f"❌ Failed to fetch file metadata for {series['title']} ep {ep['id']}")
         return
 
-    # 5) push that single NZB URL into Sonarr
-    push_payload = {
-        "title":       title,
-        "downloadUrl": dl_url,
-        "protocol":    protocol,
-        "publishDate": publishDate
-    }
-    resp = arr_request(
-        api_url, api_key, api_timeout,
-        "release/push",
-        method="POST",
-        data=push_payload
-    )
-    if resp is not None:
-        log.info(f"⬇️ Queued '{title}' via release/push")
-    else:
-        log.error("Failed to push release into Sonarr")
-    
-# --- Main Logic ---
-def check_episode(series: dict, episode: dict) -> None:
-    if not episode.get("hasFile") or not episode.get("episodeFileId"):
-        return
-
-    try:
-        epfile = get_episode_file(episode["episodeFileId"])
-    except Exception as e:
-        logging.error(
-            f"❌ Could not fetch file for {series['title']} "
-            f"S{episode['seasonNumber']:02}E{episode['episodeNumber']:02}: {e}"
-        )
-        return
-
-    # first try Sonarr's sceneName, then fall back to the recorded file name
-    raw = (
-        epfile.get("sceneName")
-        or epfile.get("relativePath")
-        or epfile.get("path")
-        or ""
-    )
+    raw   = epfile.get("sceneName") or epfile.get("relativePath") or epfile.get("path") or ""
     scene = os.path.basename(raw)
+
+    # parse season/episode from sceneName to build the same key as the incrementer
     m = re.search(r"[sS](\d{2})[eE](\d{2})", scene)
     if m:
         parsed_season, parsed_epnum = map(int, m.groups())
     else:
-        parsed_season = episode["seasonNumber"]
-        parsed_epnum = episode["episodeNumber"]
+        # fallback to the Sonarr‐expected numbers
+        parsed_season   = ep["seasonNumber"]
+        parsed_epnum    = ep["episodeNumber"]
 
-    series_norm = normalize_title(series["title"])
-    expected_season = episode["seasonNumber"]
-    expected_epnum  = episode["episodeNumber"]
-    expected        = normalize_title(episode["title"])
-    actual          = normalize_title(scene)
-    key             = f"series::{series_norm}::S{expected_season:02d}E{expected_epnum:02d}"
-    code            = f"S{expected_season:02}E{expected_epnum:02}"
-    # use Sonarr’s original, nicely-formatted title
-    nice_title = series["title"]
+    key  = f"series::{normalize_title(series['title'])}::S{parsed_season:02d}E{parsed_epnum:02d}"
+    code = f"S{parsed_season:02d}E{parsed_epnum:02d}"
+    nice = series["title"]
 
-    logging.info(f"\n📺 {series['title']} {code}")
-    logging.info(f"🎯 Expected: {episode['title']}")
+    expected_norm = normalize_title(ep["title"])
+    actual_norm   = normalize_title(scene)
+
+    logging.info(f"\n📺 {nice} {code}")
+    logging.info(f"🎯 Expected: {ep['title']}")
     logging.info(f"🎞️ Scene:    {scene}")
 
-    if expected in actual:
-        remove_tag(key, SPECIAL_TAG_NAME, code, nice_title)
-        logging.info(f"✅ Match for {series['title']} {code}; tag removed")
+    # On match: remove any existing tag
+    if expected_norm in actual_norm:
+        if remove_tag(key, SPECIAL_TAG_NAME, code, nice):
+            logging.info(f"✅ Match for {nice} {code}; tag removed")
         return
 
-    cnt = get_mismatch_count(key)
+    # On mismatch: fetch external count using the parsed key
+    count = get_mismatch_count(key)
+    logging.error(f"❌ Mismatch for {code} (external count={count})")
 
-    if cnt >= MISMATCH_THRESHOLD:
-        just_tagged = add_tag(key, SPECIAL_TAG_NAME, code, nice_title)
-        if just_tagged:
-            logging.info(f"⏩ Threshold reached ({cnt}) → newly tagged {series['title']} {code}")
-            grab_best_nzb(
-                SONARR_URL, SONARR_API_KEY, 15,
-                series["id"], episode["id"]
-            )
+    if count >= MISMATCH_THRESHOLD:
+        # Tag & grab best NZB once
+        if add_tag(key, SPECIAL_TAG_NAME, code, nice):
+            logging.info(f"⏩ Count ≥ {MISMATCH_THRESHOLD}, tagging & grabbing best NZB")
+            grab_best_nzb(client, series["id"], ep["id"])
         else:
-            logging.info(f"⏩ Already tagged {series['title']} {code}; skipping grab")
-        return
+            logging.info(f"⏩ Already tagged {nice} {code}; skipping grab")
 
-    logging.error(f"❌ Mismatch for {code} (count={cnt})")
-    if not FORCE_RUN:
-        logging.info("Skipping actions (not force-run).")
-        return
+    elif args.force_run:
+        # Immediate delete/requeue if forced
+        logging.info("⚡ Force-run: deleting file and re-searching")
+        delete_episode_file(client, epfile["id"])
+        refresh_series(client, series["id"])
+        search_episode(client, ep["id"])
 
-    delete_file(epfile.get("id"))
-    refresh_series(series.get("id"))
-    search_episode(episode.get("id"))
-
-def scan_library() -> None:
-    for s in get_series_list():
-        if TVDB_FILTER and str(s.get("tvdbId")) != TVDB_FILTER:
+def scan_library(client: SonarrClient):
+    for series in client.get("series") or []:
+        if TVDB_FILTER and str(series.get("tvdbId")) != TVDB_FILTER:
             continue
-        logging.info(f"\n=== Scanning {s['title']} ===")
-        for ep in get_episodes(s["id"]):
-            season = ep.get("seasonNumber")
-            if SEASON_FILTER and season not in SEASON_FILTER:
-                logging.debug(f"⏩ Skipping S{season:02d} for {s['title']} (filter={SEASON_FILTER})")
+        logging.info(f"\n=== Scanning {series['title']} ===")
+        for ep in client.get(f"episode?seriesId={series['id']}") or []:
+            if SEASON_FILTER and ep["seasonNumber"] not in SEASON_FILTER:
                 continue
             try:
-                check_episode(s, ep)
-            except Exception as e:
-                logging.error(f"Fatal error checking {s['title']} ep {ep.get('id')}: {e}")
+                check_episode(client, series, ep)
+            except Exception:
+                logging.exception(f"Fatal error checking {series['title']} ep {ep.get('id')}")
+
+# -----------------------------------------------------------------------------
+# Sonarr Actions
+# -----------------------------------------------------------------------------
+
+def delete_episode_file(client: SonarrClient, file_id: int):
+    client.delete(f"episodefile/{file_id}")
+    logging.info(f"🗑️ Deleted episode file ID {file_id}")
+
+def refresh_series(client: SonarrClient, series_id: int):
+    for cmd in ("RefreshSeries", "RescanSeries"):
+        client.post("command", {"name": cmd, "seriesId": series_id})
+    logging.info(f"🔄 Refreshed series ID {series_id}")
+
+def search_episode(client: SonarrClient, episode_id: int):
+    client.post("command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
+    logging.info(f"🔍 Searched for episode ID {episode_id}")
+
+def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: int = 5):
+    cmd = client.post("command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
+    if not cmd or "id" not in cmd:
+        logging.error("Failed to start EpisodeSearch")
+        return
+
+    time.sleep(wait)
+    releases = client.get(f"release?episodeId={episode_id}") or []
+    candidates = [r for r in releases if r.get("seriesId") == series_id]
+    if not candidates:
+        logging.warning("No releases found to pick from")
+        return
+
+    best = max(candidates, key=lambda r: r.get("customFormatScore", 0))
+    if not best.get("downloadUrl"):
+        logging.error("Best release has no downloadUrl")
+        return
+
+    payload = {
+        "title":       best.get("title"),
+        "downloadUrl": best["downloadUrl"],
+        "protocol":    best.get("protocol"),
+        "publishDate": best.get("publishDate")
+    }
+    pushed = client.post("release/push", payload)
+    if pushed is not None:
+        logging.info(f"⬇️ Queued '{best.get('title')}' via release/push")
+    else:
+        logging.error("Failed to push release into Sonarr")
+
+# -----------------------------------------------------------------------------
+# Entrypoint
+# -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    init_db()
-    scan_library()
+    try:
+        init_db()
+        sonarr = SonarrClient(SONARR_URL, SONARR_API_KEY,
+                              timeout=API_TIMEOUT, verify_ssl=VERIFY_SSL)
+        scan_library(sonarr)
+    except Exception:
+        logging.critical("💥 Unhandled exception, shutting down", exc_info=True)
+        sys.exit(1)
