@@ -17,7 +17,7 @@ logging.getLogger("requests").setLevel(logging.CRITICAL)
 # === CONFIG & LOGGING ===
 LOG_FILE           = os.getenv("LOG_FILE", "/tmp/sabnzbd_prequeue_script.log")         # don't mess with
 DATABASE_URL       = os.getenv("DATABASE_URL", "[postgres db url]")                    # fill in db url
-MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "5"))                         # don't mess with
+MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "3"))                         # needs to match value in analyzer.py
 MOVIE_CATEGORY     = os.getenv("MOVIE_CATEGORY", "movies")                             # don't mess with
 SONARR_URL         = os.getenv("SONARR_URL", "http://[sonarr_ip]:8989").rstrip("/")    # fill in sonarr ip address
 SONARR_API_KEY     = os.getenv("SONARR_API_KEY", "[sonarr api key]")                   # fill in sonarr api key
