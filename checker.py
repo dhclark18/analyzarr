@@ -451,7 +451,7 @@ def check_episode(series: dict, episode: dict) -> None:
         if just_tagged:
             logging.info(f"⏩ Threshold reached ({cnt}) → newly tagged {series['title']} {code}")
             grab_best_nzb(
-                SONARR_URL, SONARR_API_KEY, SONARR_TIMEOUT,
+                SONARR_URL, SONARR_API_KEY, 15,
                 series["id"], episode["id"]
             )
         else:
