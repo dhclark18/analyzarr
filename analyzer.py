@@ -268,8 +268,6 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
 
     # On mismatch: fetch external count using the parsed key
     count = get_mismatch_count(key)
-    logging.error(f"❌ Mismatch for {code} (external count={count})")
-
     if count >= MISMATCH_THRESHOLD:
         if add_tag(key, SPECIAL_TAG_NAME, code, nice):
             logging.info(f"⏩ Count ≥ {MISMATCH_THRESHOLD}, tagging & grabbing best NZB")
