@@ -19,3 +19,6 @@ This Docker-based tool verifies that downloaded TV episode filenames match offic
 2. Set up Sabnzbd to use script as a prequeue script
 3. build custom Sabznbd so it has psycopg2
 4. Create new docker stack using provided docker-compose.yml and modify variables as needed
+
+## Disclaimer
+I am a novice coder with no formal training and this was created with the help of AI. Its mainly a fun project because I noticed sometimes sonarr would get a mislabeled nzb and I wouldnt find out until I tried to play it in plex. Use at your own risk. Feel free to provide feedback. 
