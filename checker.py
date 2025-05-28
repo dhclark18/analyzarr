@@ -378,7 +378,6 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
     if file_id:
         try:
             delete_episode_file(client, file_id)
-            logging.info(f"🗑️ Deleted existing file ID {file_id} to force upgrade")
         except Exception:
             logging.exception(f"Failed to delete existing file {file_id}; continuing anyway")
 
