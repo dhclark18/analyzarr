@@ -271,13 +271,18 @@ def grab_best_release(series_id: int, episode_id: int, timeout: int = 5) -> None
     title = best.get("title", "<unknown>")
 
     # 5) tell Sonarr to grab it
+    payload = {
+        "guid":      best["guid"],
+        "indexerId": best["indexerId"]
+    }
+    
     SONARR.post(
         f"{SONARR_URL}/api/v3/release",
-        json=best,
+        json=payload,      # ✅ minimal body
         timeout=10
     ).raise_for_status()
-
-    logging.info(f"⬇️ Grabbed '{title}' (score={score}) for ep {episode_id}")
+    
+    logging.info(f"⬇️ Grabbed '{best['title']}' (guid={best['guid']})")
     
 # --- Main Logic ---
 def check_episode(series: dict, episode: dict) -> None:
