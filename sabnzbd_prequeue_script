@@ -19,7 +19,7 @@ LOG_FILE           = os.getenv("LOG_FILE", "/tmp/sabnzbd_prequeue_script.log")
 DATABASE_URL       = os.getenv("DATABASE_URL", "[postgres db url]")
 MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "5"))
 MOVIE_CATEGORY     = os.getenv("MOVIE_CATEGORY", "movies")
-SONARR_URL         = os.getenv("SONARR_URL", "http://[ip address]:8989").rstrip("/")
+SONARR_URL         = os.getenv("SONARR_URL", "http://[sonarr_ip]:8989").rstrip("/")
 SONARR_API_KEY     = os.getenv("SONARR_API_KEY", "[sonarr api key]")
 
 logging.basicConfig(
