@@ -123,9 +123,10 @@ def ensure_tag(conn, tag_name: str) -> int:
         cur.execute("SELECT id FROM tags WHERE name = %s", (tag_name,))
         return cur.fetchone()[0]
 
-def add_tag(key: str, tag_name: str, code: str, series_title: str) -> None:
+def add_tag(key: str, tag_name: str, code: str, series_title: str) -> bool:
     """
     Add a tag for this key and episode code (e.g., S01E02).
+    Returns True if the tag was newly inserted, False if it already existed.
     """
     try:
         with psycopg2.connect(DATABASE_URL, connect_timeout=5) as conn:
@@ -139,14 +140,19 @@ def add_tag(key: str, tag_name: str, code: str, series_title: str) -> None:
                     """,
                     (key, tag_id, code, series_title)
                 )
-                inserted = cur.rowcount
+                inserted = cur.rowcount  # 1 if inserted, 0 if skipped
             conn.commit()
+
         if inserted:
             logging.info(f"🏷️ Tagged {key} {code} with '{tag_name}' ({series_title})")
+            return True
         else:
             logging.debug(f"⚠️ Episode {key} already tagged with '{tag_name}'")
+            return False
+
     except Exception as e:
         logging.error(f"DB error adding tag '{tag_name}' to {key} {code}: {e}")
+        return False
 
 def remove_tag(key: str, tag_name: str, code: str, series_title: str) -> None:
     """
@@ -322,15 +328,17 @@ def check_episode(series: dict, episode: dict) -> None:
         return
 
     cnt = get_mismatch_count(key)
+
     if cnt >= MISMATCH_THRESHOLD:
-        add_tag(key, SPECIAL_TAG_NAME, code, nice_title)
-        logging.info(f"⏩ Threshold reached ({cnt}) → tagged {series['title']} {code}")
-    
-        # Grab the NZB with the highest customFormatScore
-        try:
-            grab_best_release(series["id"], episode["id"])
-        except Exception as e:
-            logging.error(f"Failed to grab best release: {e}")
+        just_tagged = add_tag(key, SPECIAL_TAG_NAME, code, nice_title)
+        if just_tagged:
+            logging.info(f"⏩ Threshold reached ({cnt}) → newly tagged {series['title']} {code}")
+            try:
+                grab_best_release(series["id"], episode["id"])
+            except Exception as e:
+                logging.error(f"Failed to grab best release for {series['title']} {code}: {e}")
+        else:
+            logging.debug(f"⏩ Already tagged {series['title']} {code}; skipping grab")
         return
 
     logging.error(f"❌ Mismatch for {code} (count={cnt})")
