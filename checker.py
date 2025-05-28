@@ -363,13 +363,14 @@ def check_episode(series: dict, episode: dict) -> None:
         if just_tagged:
             logging.info(f"⏩ Threshold reached ({cnt}) → newly tagged {series['title']} {code}")
             try:
-                if cnt >= MISMATCH_THRESHOLD and just_tagged:
-                    grab_best_with_push(
-                      series["id"],
-                      episode["id"],
-                      episode["seasonNumber"],
-                      episode["episodeNumber"]
-                    )
+                grab_best_with_push(
+                    series["id"],
+                    episode["id"],
+                    episode["seasonNumber"],
+                    episode["episodeNumber"]
+                )
+            except Exception as e:
+                logging.error(f"Failed to queue best release for {series['title']} {code}: {e}")
         else:
             logging.info(f"⏩ Already tagged {series['title']} {code}; skipping grab")
         return
