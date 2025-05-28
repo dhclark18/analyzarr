@@ -16,7 +16,7 @@ import time
 import logging
 import unicodedata
 import argparse
-
+from requests.exceptions import ReadTimeout, RequestException
 import requests
 from psycopg2.pool import SimpleConnectionPool
 
@@ -308,8 +308,29 @@ def scan_library(client: SonarrClient):
 # -----------------------------------------------------------------------------
 
 def delete_episode_file(client: SonarrClient, file_id: int):
-    client.delete(f"episodefile/{file_id}")
-    logging.info(f"🗑️ Deleted episode file ID {file_id}")
+    """
+    Delete the given episode file, with extended timeout and post-delete verification.
+    """
+    url = f"{client.base_url}/api/v3/episodefile/{file_id}"
+    # we’ll use a tuple (connect_timeout, read_timeout)
+    timeout = (client.timeout, client.timeout * 3)
+
+    try:
+        resp = client.session.delete(url, timeout=timeout)
+        resp.raise_for_status()
+        logging.info(f"🗑️ Deleted episode file ID {file_id}")
+    except ReadTimeout:
+        logging.warning(f"⌛ Timeout deleting file ID {file_id}; verifying deletion…")
+        try:
+            check = client.session.get(url, timeout=(client.timeout, client.timeout))
+            if check.status_code == 404:
+                logging.info(f"✅ Deletion of file ID {file_id} confirmed after timeout")
+            else:
+                logging.error(f"❌ File ID {file_id} still present (status {check.status_code})")
+        except RequestException as e:
+            logging.error(f"❌ Error verifying deletion of {file_id}: {e}")
+    except RequestException as e:
+        logging.exception(f"❌ Failed to delete file ID {file_id}: {e}")
 
 def refresh_series(client: SonarrClient, series_id: int):
     for cmd in ("RefreshSeries", "RescanSeries"):
