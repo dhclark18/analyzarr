@@ -2,12 +2,34 @@ version: "3.8"
 services:
   sonarr-scanner:
     image: dhclark18/tv-episode-checker:latest
+    ports:
+      - "5000:5000"
     environment:
-      SONARR_URL: http://192.168.1.71:8989
-      SONARR_API_KEY: your-api-key
-      CHECK_COOLDOWN: 60
-      DRY_RUN: true
-      #LIMIT_SERIES_TVDBID: [tvdb_id]
+      SONARR_URL: http://[sonarr_url]:8989
+      SONARR_API_KEY: [sonarr api key]
+      CHECK_COOLDOWN: 5                     # in seconds
+      FR_RUN: true                          # force run to delete any mismatched episodes that don't cross threshold, set to false to just see what episodes are flagged as mismatching
+      TVDB_ID: 81967                        # optional TVDB ID for show you want to analyze
+      SEASON_FILTER: 13                     # optional seaons in a show you want to analyze, or for multiple: SEASON_FILTER: 2,5,7  
+      DATABASE_URL: [postgress db url]
     volumes:
-      - /path/to/your/tv:/watched:ro
-      - /path/to/logs:/logs
+      - /path/to/tv/folder:/watched:ro
+      - /path/to/logs:/logs                 #optional
+    depends_on:
+      postgres:
+        condition: service_started   
+        restart: true
+                   
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: sonarr
+      POSTGRES_PASSWORD: [password]
+      POSTGRES_DB: analyzarr
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      
+volumes:
+  pgdata:
