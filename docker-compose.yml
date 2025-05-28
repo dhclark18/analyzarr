@@ -9,8 +9,8 @@ services:
       SONARR_API_KEY: [sonarr api key]
       CHECK_COOLDOWN: 5                     # in seconds
       FR_RUN: true                          # force run to delete any mismatched episodes that don't cross threshold, set to false to just see what episodes are flagged as mismatching
-      TVDB_ID: 81967                        # optional TVDB ID for show you want to analyze
-      SEASON_FILTER: 13                     # optional seaons in a show you want to analyze, or for multiple: SEASON_FILTER: 2,5,7  
+      TVDB_ID: [id]                        # optional TVDB ID for show you want to analyze
+      SEASON_FILTER: [season]                     # optional seaons in a show you want to analyze, or for multiple: SEASON_FILTER: 2,5,7  
       DATABASE_URL: [postgress db url]
     volumes:
       - /path/to/tv/folder:/watched:ro
