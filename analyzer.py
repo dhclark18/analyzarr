@@ -24,7 +24,7 @@ from psycopg2.pool import SimpleConnectionPool
 # CLI & Configuration
 # -----------------------------------------------------------------------------
 
-parser = argparse.ArgumentParser(description="sonarr-checker")
+parser = argparse.ArgumentParser(description="analyzer")
 parser.add_argument(
     "--force-run",
     action="store_true",
@@ -57,7 +57,7 @@ else:
 
 LOG_DIR = os.getenv("LOG_PATH", "/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "checker.log")
+LOG_FILE = os.path.join(LOG_DIR, "analyzer.log")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -195,7 +195,7 @@ class SonarrClient:
         self.session  = requests.Session()
         self.session.headers.update({
             "X-Api-Key": api_key,
-            "User-Agent": "checker"
+            "User-Agent": "analyzer"
         })
 
     def request(self, endpoint, method="GET", json_data=None):
