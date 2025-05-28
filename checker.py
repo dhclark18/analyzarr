@@ -321,47 +321,52 @@ def search_episode(client: SonarrClient, episode_id: int):
     logging.info(f"🔍 Searched for episode ID {episode_id}")
 
 def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: int = 5):
-    # 1) fire off the search command
+    # 1) fire off EpisodeSearch
     cmd = client.post("command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
     if not cmd or "id" not in cmd:
         logging.error("Failed to start EpisodeSearch")
         return
+
     cmd_id = cmd["id"]
     logging.info(f"🔍 EpisodeSearch started (id={cmd_id}) for ep {episode_id}")
 
-    # 2) wait — or better: poll until the command completes
-    elapsed = 0
-    while elapsed < wait:
-        status = client.get(f"command/{cmd_id}")
-        if status and status.get("state") == "Completed":
-            break
-        time.sleep(1)
-        elapsed += 1
-    logging.debug(f"Search command state after {elapsed}s: {status}")
+    # 2) wait for Sonarr to finish collecting results
+    time.sleep(wait)
 
-    # 3) fetch all releases for that episode
+    # 3) fetch releases
     releases = client.get(f"release?episodeId={episode_id}") or []
     logging.debug(f"raw releases payload: {releases!r}")
 
-    # 4) filter by our seriesId
+    # 4) pick only those for our series
     candidates = [r for r in releases if r.get("mappedSeriesId") == series_id]
-    logging.info(f"Found {len(candidates)} candidate releases for series {series_id} / ep {episode_id}")
+    logging.info(f"Found {len(candidates)} candidate releases")
     if not candidates:
         logging.warning("No releases found to pick from")
         return
 
-    # 5) pick the best by customFormatScore
+    # 5) choose best by score
     best = max(candidates, key=lambda r: r.get("customFormatScore", 0))
-    if not best.get("downloadUrl"):
+    dl_url = best.get("downloadUrl")
+    if not dl_url:
         logging.error("Best release has no downloadUrl")
         return
 
-    # 6) push that NZB into Sonarr
+    # 6) Delete any exisiting episode file 
+    ep = client.get(f"episode/{episode_id}") or {}
+    file_id = ep.get("episodeFileId")
+    if file_id:
+        try:
+            client.delete(f"episodefile/{file_id}")
+            logging.info(f"🗑️ Deleted existing file ID {file_id} to force upgrade")
+        except Exception:
+            logging.exception(f"Failed to delete existing file {file_id}; continuing anyway")
+
+    # 7) push the new NZB
     payload = {
         "title":       best.get("title"),
-        "downloadUrl": best["downloadUrl"],
+        "downloadUrl": dl_url,
         "protocol":    best.get("protocol"),
-        "publishDate": best.get("publishDate")
+        "publishDate": best.get("publishDate"),
     }
     pushed = client.post("release/push", payload)
     if pushed is not None:
