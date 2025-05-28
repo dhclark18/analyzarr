@@ -15,7 +15,6 @@ import re
 import time
 import logging
 import unicodedata
-import argparse
 from requests.exceptions import ReadTimeout, RequestException
 import requests
 from psycopg2.pool import SimpleConnectionPool
@@ -24,19 +23,11 @@ from psycopg2.pool import SimpleConnectionPool
 # CLI & Configuration
 # -----------------------------------------------------------------------------
 
-parser = argparse.ArgumentParser(description="analyzer")
-parser.add_argument(
-    "--force-run",
-    action="store_true",
-    help="On mismatch, delete and requeue instead of tagging"
-)
-args = parser.parse_args()
-
 DATABASE_URL       = os.getenv("DATABASE_URL") or sys.exit("❌ DATABASE_URL not set")
 SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989")
 SONARR_API_KEY     = os.getenv("SONARR_API_KEY") or sys.exit("❌ SONARR_API_KEY not set")
 API_TIMEOUT        = int(os.getenv("API_TIMEOUT", "10"))
-
+FR_RUN             = os.getenv("FR_RUN")
 TVDB_FILTER        = os.getenv("TVDB_ID")
 SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "5"))
@@ -285,12 +276,15 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
             grab_best_nzb(client, series["id"], ep["id"])
         else:
             logging.info(f"⏩ Already tagged {nice} {code}; skipping grab")
+        return
 
-    elif args.force_run:
-        logging.info("⚡ Force-run: deleting file and re-searching")
-        delete_episode_file(client, epfile["id"])
-        refresh_series(client, series["id"])
-        search_episode(client, ep["id"])
+    if not FR_RUN:
+    logging.info("Skipping actions (not force-run).")
+    return
+    logging.info("⚡ Force-run: deleting file and re-searching")
+    delete_episode_file(client, epfile["id"])
+    refresh_series(client, series["id"])
+    search_episode(client, ep["id"])
 
 def scan_library(client: SonarrClient):
     for series in client.get("series") or []:
