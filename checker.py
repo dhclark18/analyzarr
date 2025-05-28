@@ -351,7 +351,7 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
         logging.error("Best release has no downloadUrl")
         return
 
-    # 6) Delete any exisiting episode file 
+    # 6) Delete any existing episode file 
     ep = client.get(f"episode/{episode_id}") or {}
     file_id = ep.get("episodeFileId")
     if file_id:
