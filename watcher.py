@@ -8,7 +8,7 @@ from watchdog.observers.polling import PollingObserver as Observer  # use pollin
 
 WATCH_DIR = os.getenv("WATCH_DIR", "/watched")
 COOLDOWN_SECONDS = int(os.getenv("CHECK_COOLDOWN", "60"))
-CHECK_COMMAND = ["python", "checker.py"]
+CHECK_COMMAND = ["python", "analyzer.py"]
 
 # --- Logging setup ---
 LOG_DIR = os.getenv("LOG_PATH", "/logs")
@@ -53,22 +53,22 @@ class ChangeHandler(FileSystemEventHandler):
         global last_run
         now = time.time()
         if ignore_cooldown or (now - last_run) > COOLDOWN_SECONDS:
-            logging.info("🔁 Change detected — running checker...")
+            logging.info("🔁 Change detected — running analyzer...")
             try:
                 subprocess.run(CHECK_COMMAND, check=True)
                 last_run = now
             except subprocess.CalledProcessError as e:
-                logging.error(f"Checker failed: {e}")
+                logging.error(f"Analyzer failed: {e}")
         else:
             logging.info("⏳ Cooldown active, skipping check.")
 
 def main():
     # initial run (does NOT start the cooldown so that your first replace still triggers)
-    logging.info("🚀 Running checker on startup...")
+    logging.info("🚀 Running analyzer on startup...")
     try:
         subprocess.run(CHECK_COMMAND, check=True)
     except subprocess.CalledProcessError as e:
-        logging.error(f"Initial checker run failed: {e}")
+        logging.error(f"Initial analyzer run failed: {e}")
 
     logging.info(f"👀 Watching directory (via polling): {WATCH_DIR}")
     handler = ChangeHandler()
