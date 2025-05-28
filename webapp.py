@@ -80,4 +80,4 @@ def tagged_episodes(series_name, tag_id):
     )
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)
