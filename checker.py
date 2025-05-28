@@ -201,13 +201,13 @@ def arr_request(api_url: str, api_key: str, api_timeout: int, endpoint: str, met
         
         # Ensure api_url has a scheme
         if not (api_url.startswith('http://') or api_url.startswith('https://')):
-            sonarr_logger.error(f"Invalid URL format: {api_url} - URL must start with http:// or https://")
+            logger.error(f"Invalid URL format: {api_url} - URL must start with http:// or https://")
             return None
             
         # Construct the full URL properly
         full_url = f"{api_url.rstrip('/')}/api/v3/{endpoint.lstrip('/')}"
         
-        sonarr_logger.debug(f"Making {method} request to: {full_url}")
+        logger.debug(f"Making {method} request to: {full_url}")
         
         # Set up headers with User-Agent to identify Huntarr
         headers = {
@@ -217,13 +217,13 @@ def arr_request(api_url: str, api_key: str, api_timeout: int, endpoint: str, met
         }
         
         # Log the User-Agent for debugging
-        sonarr_logger.debug(f"Using User-Agent: {headers['User-Agent']}")
+        logger.debug(f"Using User-Agent: {headers['User-Agent']}")
         
         # Get SSL verification setting
         verify_ssl = get_ssl_verify_setting()
         
         if not verify_ssl:
-            sonarr_logger.debug("SSL verification disabled by user setting")
+            logger.debug("SSL verification disabled by user setting")
         
         try:
             if method.upper() == "GET":
@@ -235,7 +235,7 @@ def arr_request(api_url: str, api_key: str, api_timeout: int, endpoint: str, met
             elif method.upper() == "DELETE":
                 response = session.delete(full_url, headers=headers, timeout=api_timeout, verify=verify_ssl)
             else:
-                sonarr_logger.error(f"Unsupported HTTP method: {method}")
+                logger.error(f"Unsupported HTTP method: {method}")
                 return None
             
             # Check for successful response
@@ -247,12 +247,12 @@ def arr_request(api_url: str, api_key: str, api_timeout: int, endpoint: str, met
                     return response.json()
                 except json.JSONDecodeError as jde:
                     # Log detailed information about the malformed response
-                    sonarr_logger.error(f"Error decoding JSON response from {endpoint}: {str(jde)}")
-                    sonarr_logger.error(f"Response status code: {response.status_code}")
-                    sonarr_logger.error(f"Response content (first 200 chars): {response.content[:200]}")
+                    logger.error(f"Error decoding JSON response from {endpoint}: {str(jde)}")
+                    logger.error(f"Response status code: {response.status_code}")
+                    logger.error(f"Response content (first 200 chars): {response.content[:200]}")
                     return None
             else:
-                sonarr_logger.debug(f"Empty response content from {endpoint}, returning empty dict")
+                logger.debug(f"Empty response content from {endpoint}, returning empty dict")
                 return {}
                 
         except requests.exceptions.RequestException as e:
@@ -263,15 +263,13 @@ def arr_request(api_url: str, api_key: str, api_timeout: int, endpoint: str, met
                 if e.response.content:
                     error_details += f", Content: {e.response.content[:200]}"
             
-            sonarr_logger.error(f"Error during {method} request to {endpoint}: {error_details}")
+            logger.error(f"Error during {method} request to {endpoint}: {error_details}")
             return None
     except Exception as e:
         # Catch all exceptions and log them with traceback
         error_msg = f"CRITICAL ERROR in arr_request: {str(e)}"
-        sonarr_logger.error(error_msg)
-        sonarr_logger.error(f"Full traceback: {traceback.format_exc()}")
-        print(error_msg, file=sys.stderr)
-        print(traceback.format_exc(), file=sys.stderr)
+        logger.error(error_msg)
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return None
         
 def normalize_title(text: str) -> str:
