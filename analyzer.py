@@ -30,7 +30,7 @@ API_TIMEOUT        = int(os.getenv("API_TIMEOUT", "10"))
 FORCE_RUN          = os.getenv("FR_RUN", "false").lower() == "true"
 TVDB_FILTER        = os.getenv("TVDB_ID")
 SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
-MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "5"))
+MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "3"))
 
 _raw = os.getenv("SEASON_FILTER", "")
 if _raw:
