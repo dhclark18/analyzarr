@@ -5,9 +5,9 @@ This Docker-based tool verifies that downloaded TV episode filenames match offic
 ## Features
 
 - Auto-checks TV episode filenames against TVDb
-- Attempts 3 times to find nzb with correct title. Afterwards it flags the episode as problematic and just requests the nzb release with the highest custom format. Once an episode is flagged as problematic it won't be redownloaded.
-- Creates database of problematic episodes for you to manually intervene
-- Supports real-time directory watching
+- Attempts 3 times to find nzb with correct title. Afterwards it flags the episode as problematic and just requests the nzb release with the highest custom format. Once an episode is flagged as problematic it won't be tocuhed by the matching software.
+- Creates database of problematic episodes for you to manually intervene.
+- Supports real-time directory watching.
 
 ## Requirements
 - Sonarr file name format must be {Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{...}]
@@ -21,4 +21,4 @@ This Docker-based tool verifies that downloaded TV episode filenames match offic
 4. Create new docker stack using provided docker-compose.yml and modify variables as needed
 
 ## Disclaimer
-This is a work in progress. I am a novice coder with no formal training and this was created with the help of AI. Its mainly a fun project because I noticed sometimes sonarr would get a mislabeled nzb and I wouldnt find out until I tried to play it in plex. Use at your own risk. Feel free to provide feedback. 
+This is a work in progress. I am a novice coder with no formal training and this was created with the help of AI. Its mainly a fun project because I noticed sometimes Sonarr would get a mislabeled nzb and I wouldnt find out until I tried to play it in Plex. Use at your own risk. Feel free to provide feedback. 
