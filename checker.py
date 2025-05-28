@@ -321,23 +321,42 @@ def search_episode(client: SonarrClient, episode_id: int):
     logging.info(f"🔍 Searched for episode ID {episode_id}")
 
 def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: int = 5):
+    # 1) fire off the search command
     cmd = client.post("command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
     if not cmd or "id" not in cmd:
         logging.error("Failed to start EpisodeSearch")
         return
+    cmd_id = cmd["id"]
+    logging.info(f"🔍 EpisodeSearch started (id={cmd_id}) for ep {episode_id}")
 
-    time.sleep(wait)
+    # 2) wait — or better: poll until the command completes
+    elapsed = 0
+    while elapsed < wait:
+        status = client.get(f"command/{cmd_id}")
+        if status and status.get("state") == "Completed":
+            break
+        time.sleep(1)
+        elapsed += 1
+    logging.debug(f"Search command state after {elapsed}s: {status}")
+
+    # 3) fetch all releases for that episode
     releases = client.get(f"release?episodeId={episode_id}") or []
+    logging.debug(f"raw releases payload: {releases!r}")
+
+    # 4) filter by our seriesId
     candidates = [r for r in releases if r.get("seriesId") == series_id]
+    logging.info(f"Found {len(candidates)} candidate releases for series {series_id} / ep {episode_id}")
     if not candidates:
         logging.warning("No releases found to pick from")
         return
 
+    # 5) pick the best by customFormatScore
     best = max(candidates, key=lambda r: r.get("customFormatScore", 0))
     if not best.get("downloadUrl"):
         logging.error("Best release has no downloadUrl")
         return
 
+    # 6) push that NZB into Sonarr
     payload = {
         "title":       best.get("title"),
         "downloadUrl": best["downloadUrl"],
