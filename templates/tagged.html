@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Episodes in {{ series }} (Tag {{ tag_id }}){% endblock %}
+
+{% block content %}
+  <h1 class="mb-4 text-light">
+    Episodes in {{ series }} with Tag {{ tag_id }}
+  </h1>
+
+  <div class="card bg-dark text-light border-secondary">
+    <div class="card-header">
+      <a href="{{ url_for('index') }}"
+         class="btn btn-sm btn-outline-light me-2">
+        ← Back
+      </a>
+      <span class="h6 mb-0">{{ rows|length }} episodes</span>
+    </div>
+
+    <div class="card-body p-0">
+      {% if not rows %}
+        <div class="p-3 text-center text-muted">
+          <em>No episodes found for this tag.</em>
+        </div>
+      {% else %}
+        <div class="table-responsive">
+          <table class="table table-striped table-hover table-dark mb-0">
+            <thead class="table-primary">
+              <tr>
+                <th>Code</th>
+                <th>Tag ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td>{{ r.code }}</td>
+                  <td>{{ r.tag_id }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
