@@ -157,7 +157,7 @@ def main():
     if normalize(expected) in normalize(nzbname):
         reset_count(key)
         logger.info(f"Matching logic: expected='{expected}' -> nzbname='{nzbname}'")
-        ogger.info(f"🔍 Match successful")
+        logger.info(f"🔍 Match successful")
         return respond("1")
 
     # if we've already hit the threshold, just accept until a match resets it
