@@ -3,7 +3,7 @@
 
 Features:
  - Pooled PostgreSQL connections (psycopg2 SimpleConnectionPool)
- - Modular SonarrClient with unified error handling
+ - Modular SonarrClient with unified error handling, heavily based on Huntarr project
  - Reads mismatch counts from an external incrementer script
  - Tags & auto-grabs when count ≥ threshold, using keys derived from sceneName
  - Optional force-run to delete and requeue instead of tagging
@@ -197,7 +197,7 @@ class SonarrClient:
         self.session    = requests.Session()
         self.session.headers.update({
             "X-Api-Key": api_key,
-            "User-Agent": "Huntarr/1.0 (+https://github.com/plexguide/Huntarr)"
+            "User-Agent": "checker"
         })
 
     def request(self, endpoint, method="GET", json_data=None):
