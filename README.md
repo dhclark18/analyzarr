@@ -1,4 +1,4 @@
-# TV Episode Filename Checker
+# One-liner
 
 This Docker-based tool verifies that downloaded TV episode filenames match official titles (via TVDb) and triggers Sonarr to re-download them if they don’t.
 
@@ -10,13 +10,8 @@ This Docker-based tool verifies that downloaded TV episode filenames match offic
 
 ## Requirements
 - Sonarr file name format must be {Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{...}]
+- Only works with Sabnzbd currently because it requires a prequeue script specifically designed for Sabnzbd
   
 ## Setup
 
-1. Fill in API keys and Sonarr URL in:
-   - `docker-compose.yml`
-   - `sabnzbd_docker_checker.sh`
-
-2. Build the image:
-   ```bash
-   docker-compose build
+1. Download 
