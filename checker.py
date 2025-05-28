@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+Huntarr: A Sonarr scene-name mismatch checker and auto-resolver (reads external mismatch counts).
 
 Features:
  - Pooled PostgreSQL connections (psycopg2 SimpleConnectionPool)
@@ -36,7 +37,6 @@ DATABASE_URL       = os.getenv("DATABASE_URL") or sys.exit("❌ DATABASE_URL not
 SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989")
 SONARR_API_KEY     = os.getenv("SONARR_API_KEY") or sys.exit("❌ SONARR_API_KEY not set")
 API_TIMEOUT        = int(os.getenv("API_TIMEOUT", "10"))
-VERIFY_SSL         = os.getenv("VERIFY_SSL", "true").lower() in ("1", "true", "yes")
 
 TVDB_FILTER        = os.getenv("TVDB_ID")
 SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
@@ -190,11 +190,10 @@ def remove_tag(conn, key: str, tag_name: str, code: str, series_title: str) -> b
 # -----------------------------------------------------------------------------
 
 class SonarrClient:
-    def __init__(self, base_url, api_key, timeout=10, verify_ssl=True):
-        self.base_url   = base_url.rstrip("/")
-        self.timeout    = timeout
-        self.verify_ssl = verify_ssl
-        self.session    = requests.Session()
+    def __init__(self, base_url, api_key, timeout=10):
+        self.base_url = base_url.rstrip("/")
+        self.timeout  = timeout
+        self.session  = requests.Session()
         self.session.headers.update({
             "X-Api-Key": api_key,
             "User-Agent": "checker"
@@ -206,8 +205,7 @@ class SonarrClient:
             resp = self.session.request(
                 method, url,
                 json=json_data,
-                timeout=self.timeout,
-                verify=self.verify_ssl
+                timeout=self.timeout
             )
             resp.raise_for_status()
             return resp.json() if resp.content else {}
@@ -256,9 +254,8 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     if m:
         parsed_season, parsed_epnum = map(int, m.groups())
     else:
-        # fallback to the Sonarr‐expected numbers
-        parsed_season   = ep["seasonNumber"]
-        parsed_epnum    = ep["episodeNumber"]
+        parsed_season = ep["seasonNumber"]
+        parsed_epnum  = ep["episodeNumber"]
 
     key  = f"series::{normalize_title(series['title'])}::S{parsed_season:02d}E{parsed_epnum:02d}"
     code = f"S{parsed_season:02d}E{parsed_epnum:02d}"
@@ -282,7 +279,6 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     logging.error(f"❌ Mismatch for {code} (external count={count})")
 
     if count >= MISMATCH_THRESHOLD:
-        # Tag & grab best NZB once
         if add_tag(key, SPECIAL_TAG_NAME, code, nice):
             logging.info(f"⏩ Count ≥ {MISMATCH_THRESHOLD}, tagging & grabbing best NZB")
             grab_best_nzb(client, series["id"], ep["id"])
@@ -290,7 +286,6 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
             logging.info(f"⏩ Already tagged {nice} {code}; skipping grab")
 
     elif args.force_run:
-        # Immediate delete/requeue if forced
         logging.info("⚡ Force-run: deleting file and re-searching")
         delete_episode_file(client, epfile["id"])
         refresh_series(client, series["id"])
@@ -363,8 +358,7 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
 if __name__ == "__main__":
     try:
         init_db()
-        sonarr = SonarrClient(SONARR_URL, SONARR_API_KEY,
-                              timeout=API_TIMEOUT, verify_ssl=VERIFY_SSL)
+        sonarr = SonarrClient(SONARR_URL, SONARR_API_KEY, timeout=API_TIMEOUT)
         scan_library(sonarr)
     except Exception:
         logging.critical("💥 Unhandled exception, shutting down", exc_info=True)
