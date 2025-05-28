@@ -279,8 +279,10 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
         return
 
     if not FORCE_RUN:
-    logging.info("Skipping actions (not force-run).")
-    return
+        logging.info("Skipping actions (not force-run).")
+        return
+    
+    logging.error(f"❌ Mismatch for {code} (external count={count})")
     logging.info("⚡ Force-run: deleting file and re-searching")
     delete_episode_file(client, epfile["id"])
     refresh_series(client, series["id"])
