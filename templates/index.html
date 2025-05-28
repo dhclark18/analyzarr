@@ -15,13 +15,20 @@
           <div class="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3">
             {% for row in rows %}
               <div class="col">
-                <div class="card bg-dark text-light h-100 border-secondary">
-                  <div class="card-body">
-                    <h5 class="card-title">{{ row.Title }}</h5>
-                    <p class="card-text mb-1"><strong>Seasons:</strong> {{ row.Seasons }}</p>
-                    <p class="card-text"><strong>Monitored:</strong> {{ row.Monitored }}</p>
+                <a href="{{ url_for(
+                             'tagged_episodes',
+                             series_name=row.Title|urlencode,
+                             tag_id=1
+                           ) }}"
+                   class="text-decoration-none text-reset">
+                  <div class="card bg-dark text-light h-100 border-secondary">
+                    <div class="card-body">
+                      <h5 class="card-title">{{ row.Title }}</h5>
+                      <p class="card-text mb-1"><strong>Seasons:</strong> {{ row.Seasons }}</p>
+                      <p class="card-text"><strong>Monitored:</strong> {{ row.Monitored }}</p>
+                    </div>
                   </div>
-                </div>
+                </a>
               </div>
             {% endfor %}
           </div>
