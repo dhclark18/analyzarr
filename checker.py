@@ -7,6 +7,7 @@ import logging
 import unicodedata
 import psycopg2
 from datetime import datetime, timedelta
+import time
 
 # --- Validate environment ---
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -235,6 +236,43 @@ def search_episode(episode_id: int) -> None:
     except Exception as e:
         logging.error(f"Failed to search for episode {episode_id}: {e}")
 
+def grab_best_release(series_id: int, episode_id: int, timeout: int = 5) -> None:
+    """
+    Manually search Sonarr for this episode, then grab the release
+    with the highest customFormatScore.
+    """
+    # 1) trigger a manual search
+    cmd = {"name": "EpisodeSearch", "episodeIds": [episode_id]}
+    SONARR.post(f"{SONARR_URL}/api/v3/command", json=cmd, timeout=10).raise_for_status()
+    logging.info(f"🔍 Manual search triggered for S{episode_id}")
+
+    # 2) wait for Sonarr to index results
+    time.sleep(timeout)
+
+    # 3) fetch available releases for this episode
+    params = {"seriesId": series_id, "episodeIds": episode_id}
+    r = SONARR.get(f"{SONARR_URL}/api/v3/release", params=params, timeout=10)
+    r.raise_for_status()
+    releases = r.json()
+
+    if not releases:
+        logging.warning(f"⚠️ No releases found for series {series_id} ep {episode_id}")
+        return
+
+    # 4) pick the highest‐scoring release
+    best = max(releases, key=lambda rel: rel.get("customFormatScore", 0))
+    score = best.get("customFormatScore", 0)
+    title = best.get("title", "<unknown>")
+
+    # 5) tell Sonarr to grab it
+    SONARR.post(
+        f"{SONARR_URL}/api/v3/release",
+        json=best,
+        timeout=10
+    ).raise_for_status()
+
+    logging.info(f"⬇️ Grabbed '{title}' (score={score}) for ep {episode_id}")
+    
 # --- Main Logic ---
 def check_episode(series: dict, episode: dict) -> None:
     if not episode.get("hasFile") or not episode.get("episodeFileId"):
@@ -287,6 +325,12 @@ def check_episode(series: dict, episode: dict) -> None:
     if cnt >= MISMATCH_THRESHOLD:
         add_tag(key, SPECIAL_TAG_NAME, code, nice_title)
         logging.info(f"⏩ Threshold reached ({cnt}) → tagged {series['title']} {code}")
+    
+        # Grab the NZB with the highest customFormatScore
+        try:
+            grab_best_release(series["id"], episode["id"])
+        except Exception as e:
+            logging.error(f"Failed to grab best release: {e}")
         return
 
     logging.error(f"❌ Mismatch for {code} (count={cnt})")
