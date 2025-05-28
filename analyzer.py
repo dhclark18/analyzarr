@@ -27,7 +27,7 @@ DATABASE_URL       = os.getenv("DATABASE_URL") or sys.exit("❌ DATABASE_URL not
 SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989")
 SONARR_API_KEY     = os.getenv("SONARR_API_KEY") or sys.exit("❌ SONARR_API_KEY not set")
 API_TIMEOUT        = int(os.getenv("API_TIMEOUT", "10"))
-FR_RUN             = os.getenv("FR_RUN")
+FORCE_RUN          = os.getenv("FR_RUN", "false").lower() == "true"
 TVDB_FILTER        = os.getenv("TVDB_ID")
 SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
 MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "5"))
@@ -278,7 +278,7 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
             logging.info(f"⏩ Already tagged {nice} {code}; skipping grab")
         return
 
-    if not FR_RUN:
+    if not FORCE_RUN:
     logging.info("Skipping actions (not force-run).")
     return
     logging.info("⚡ Force-run: deleting file and re-searching")
