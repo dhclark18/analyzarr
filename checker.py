@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-Huntarr: A Sonarr scene-name mismatch checker and auto-resolver (reads external mismatch counts).
 
 Features:
  - Pooled PostgreSQL connections (psycopg2 SimpleConnectionPool)
