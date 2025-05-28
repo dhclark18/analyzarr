@@ -220,12 +220,6 @@ def arr_request(api_url: str, api_key: str, api_timeout: int, endpoint: str, met
         # Log the User-Agent for debugging
         logging.debug(f"Using User-Agent: {headers['User-Agent']}")
         
-        # Get SSL verification setting
-        verify_ssl = get_ssl_verify_setting()
-        
-        if not verify_ssl:
-            logging.debug("SSL verification disabled by user setting")
-        
         try:
             if method.upper() == "GET":
                 response = session.get(full_url, headers=headers, timeout=api_timeout, verify=verify_ssl)
