@@ -31,35 +31,13 @@ def fetch_sonarr_series():
 
 @app.route("/")
 def index():
-    # 1) Episode Tag Report
-    conn = get_db_connection()
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT
-              series_title       AS series,
-              code,
-              COALESCE(
-                string_agg(tag_id::text, ', ' ORDER BY tag_id),
-              '')               AS tags
-            FROM episode_tags
-            GROUP BY series_title, code
-            ORDER BY series_title, code;
-        """)
-        report_rows = cur.fetchall()
-    conn.close()
-
-    # 2) Full Sonarr library
     try:
         library_rows = fetch_sonarr_series()
     except Exception as e:
         library_rows = [{"Title": f"Error: {e}", "Seasons": "", "Monitored": ""}]
 
-    all_data = {
-        "Episode Tag Report": report_rows,
-        "Library Series":     library_rows
-    }
-
-    return render_template("index.html", all_data=all_data)
+    # no more report_rows, no all_data
+    return render_template("index.html", library_rows=library_rows)
 
 @app.route("/series/<path:series_name>/tag/<int:tag_id>")
 def tagged_episodes(series_name, tag_id):
