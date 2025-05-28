@@ -1,5 +1,7 @@
 import os
 import requests
+from urllib.parse import quote, unquote
+
 from flask import Flask, render_template
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -29,7 +31,7 @@ def fetch_sonarr_series():
 
 @app.route("/")
 def index():
-    # 1) Episode Tag Report from raw tag_id values
+    # 1) Episode Tag Report
     conn = get_db_connection()
     with conn.cursor() as cur:
         cur.execute("""
@@ -58,6 +60,30 @@ def index():
     }
 
     return render_template("index.html", all_data=all_data)
+
+@app.route("/series/<path:series_name>/tag/<int:tag_id>")
+def tagged_episodes(series_name, tag_id):
+    # decode the URL‐encoded series name
+    series = unquote(series_name)
+    conn = get_db_connection()
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+              code,
+              tag_id
+            FROM episode_tags
+            WHERE series_title = %s
+              AND tag_id      = %s
+            ORDER BY code;
+        """, (series, tag_id))
+        rows = cur.fetchall()
+    conn.close()
+    return render_template(
+        "tagged.html",
+        series=series,
+        tag_id=tag_id,
+        rows=rows
+    )
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
