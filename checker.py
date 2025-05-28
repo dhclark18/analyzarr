@@ -57,10 +57,10 @@ else:
 
 LOG_DIR = os.getenv("LOG_PATH", "/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "huntarr.log")
+LOG_FILE = os.path.join(LOG_DIR, "checker.log")
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding="utf-8"),
