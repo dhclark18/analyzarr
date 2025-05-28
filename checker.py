@@ -151,7 +151,7 @@ def ensure_tag(conn, name: str) -> int:
 
 @with_conn
 def add_tag(conn, key: str, tag_name: str, code: str, series_title: str) -> bool:
-    tag_id = ensure_tag(conn, tag_name)
+    tag_id = ensure_tag(tag_name)
     with conn.cursor() as cur:
         cur.execute(
             """
