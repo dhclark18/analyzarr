@@ -1,17 +1,21 @@
-# One-liner
+# Analyzarr
 
-This Docker-based tool verifies that downloaded TV episode filenames match official titles (via TVDb) and triggers Sonarr to re-download them if they don’t.
+This Docker-based tool verifies that downloaded TV episode filenames match official titles (via TVDb) and triggers Sonarr to re-download them if they don’t. It also creates a database to view problematic episodes for manual intervention. 
 
 ## Features
 
 - Auto-checks TV episode filenames against TVDb
-- Triggers Sonarr redownload via its API
+- Attempts 3 times to find nzb with correct title. Afterwards it flags the episode as problematic and just requests the nzb release with the highest custom format. Once an episode is flagged as problematic it won't be redownloaded.
+- Creates database of problematic episodes for you to manually intervene
 - Supports real-time directory watching
 
 ## Requirements
 - Sonarr file name format must be {Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{...}]
-- Only works with Sabnzbd currently because it requires a prequeue script specifically designed for Sabnzbd
+- Only works with custom Sabnzbd currently because it requires a prequeue script specifically designed for Sabnzbd and psycopg2
   
 ## Setup
 
-1. Download 
+1. Download sabnzbd_prequeue_script.py and edit variables
+2. Set up Sabnzbd to use script as a prequeue script
+3. build custom Sabznbd so it has psycopg2
+4. Create new docker stack using provided docker-compose.yml and modify variables as needed
