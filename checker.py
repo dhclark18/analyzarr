@@ -8,6 +8,7 @@ import unicodedata
 import psycopg2
 from datetime import datetime, timedelta
 import time
+from typing import Any, Dict
 
 # --- Validate environment ---
 DATABASE_URL = os.getenv("DATABASE_URL")
