@@ -242,22 +242,26 @@ def search_episode(episode_id: int) -> None:
     except Exception as e:
         logging.error(f"Failed to search for episode {episode_id}: {e}")
 
-import time
-
-def grab_best_release(series_id: int, episode_id: int, wait: int = 5) -> None:
-    # 1) trigger the manual search
+def grab_best_with_push(series_id: int, episode_id: int, wait: int = 5):
+    """
+    1) Trigger a manual search for just this episode.
+    2) Wait for Sonarr to populate the release cache.
+    3) Pick the release with the highest customFormatScore.
+    4) POST its downloadUrl via /api/v3/release/push to queue only this episode.
+    """
+    # 1) trigger manual search
     resp = SONARR.post(
         f"{SONARR_URL}/api/v3/command",
         json={"name": "EpisodeSearch", "episodeIds": [episode_id]},
         timeout=10
     )
     resp.raise_for_status()
-    logging.info(f"🔍 Fired EpisodeSearch for ep {episode_id}")
+    logging.info(f"🔍 EpisodeSearch fired for episode {episode_id}")  #  [oai_citation:0‡Sonarr](https://sonarr.tv/docs/api/?utm_source=chatgpt.com)
 
-    # 2) give Sonarr some time to populate releases
+    # 2) wait briefly for Sonarr to collect results
     time.sleep(wait)
 
-    # 3) retrieve what it found
+    # 3) fetch available releases for just this episode
     r = SONARR.get(
         f"{SONARR_URL}/api/v3/release",
         params={"seriesId": series_id, "episodeIds": episode_id},
@@ -265,22 +269,37 @@ def grab_best_release(series_id: int, episode_id: int, wait: int = 5) -> None:
     )
     r.raise_for_status()
     releases = r.json()
+
     if not releases:
-        logging.warning(f"⚠️ No releases found for {series_id} ep {episode_id}")
+        logging.warning(f"⚠️ No releases found for series {series_id} ep {episode_id}")
         return
 
-    # 4) pick the one with the highest customFormatScore
-    best = max(releases, key=lambda rel: rel.get("customFormatScore", 0))
-    payload = {"guid": best["guid"], "indexerId": best["indexerId"]}
+    # pick the one with the highest customFormatScore
+    best = max(releases, key=lambda x: x.get("customFormatScore", 0))
+    dl_url      = best.get("downloadUrl")
+    title       = best.get("title")
+    protocol    = best.get("protocol")
+    publishDate = best.get("publishDate")
 
-    # 5) post back just the guid/indexerId
-    dl = SONARR.post(
-        f"{SONARR_URL}/api/v3/release",
+    if not dl_url:
+        logging.error("❌ Could not find downloadUrl on best release; aborting")
+        return
+
+    # 4) push directly into Sonarr (only this one episode will be queued) 
+    payload = {
+        "title":       title,
+        "downloadUrl": dl_url,
+        "protocol":    protocol,
+        "publishDate": publishDate
+    }
+
+    push = SONARR.post(
+        f"{SONARR_URL}/api/v3/release/push",
         json=payload,
         timeout=10
     )
-    dl.raise_for_status()
-    logging.info(f"⬇️ Grabbed '{best.get('title','?')}' (score={best.get('customFormatScore',0)})")
+    push.raise_for_status()
+    logging.info(f"⬇️ Queued '{title}' via release/push")  #  [oai_citation:1‡sonarr :: forums](https://forums.sonarr.tv/t/solved-api-release-push-not-found/21132?utm_source=chatgpt.com)
     
 # --- Main Logic ---
 def check_episode(series: dict, episode: dict) -> None:
