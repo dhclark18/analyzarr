@@ -344,7 +344,7 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
     logging.debug(f"raw releases payload: {releases!r}")
 
     # 4) filter by our seriesId
-    candidates = [r for r in releases if r.get("seriesId") == series_id]
+    candidates = [r for r in releases if r.get("mappedSeriesId") == series_id]
     logging.info(f"Found {len(candidates)} candidate releases for series {series_id} / ep {episode_id}")
     if not candidates:
         logging.warning("No releases found to pick from")
