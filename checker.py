@@ -242,58 +242,45 @@ def search_episode(episode_id: int) -> None:
     except Exception as e:
         logging.error(f"Failed to search for episode {episode_id}: {e}")
 
-def grab_best_release(series_id: int, episode_id: int, timeout: int = 5) -> None:
-    """
-    Manually search Sonarr for this episode, then grab the release
-    with the highest customFormatScore.
-    """
-    # 1) trigger a manual search
-    cmd = {"name": "EpisodeSearch", "episodeIds": [episode_id]}
-    resp = SONARR.post(f"{SONARR_URL}/api/v3/command",
-                   json=cmd, timeout=10)
-    resp.raise_for_status()
-    cmd_id = resp.json()["id"]
-    logging.info(f"🔍 Launched search (cmd {cmd_id}) for ep {episode_id}")
+import time
 
-    # 2) wait for Sonarr to index results
-    while True:
-        status = SONARR.get(
-            f"{SONARR_URL}/api/v3/command/{cmd_id}", timeout=10
-        ).json()
-        if status["state"] in ("Completed", "Failed", "Cancelled"):
-            break
-        time.sleep(1)
-    logging.info(f"🔍 Search {cmd_id} finished with state {status['state']}")
-
-    # 3) fetch available releases for this episode
-    params = {"seriesId": series_id, "episodeIds": episode_id}
-    releases = SONARR.get(
-        f"{SONARR_URL}/api/v3/release",
-        params=params, timeout=10
-    ).json()
-    if not releases:
-        logging.warning("⚠️ No releases found after search; aborting grab")
-        return
-
-    best = max(releases, key=lambda r: r.get("customFormatScore", 0))
-
-    if not releases:
-        logging.warning(f"⚠️ No releases found for series {series_id} ep {episode_id}")
-        return
-
-    # 4) pick the highest‐scoring release
-    best = max(releases, key=lambda rel: rel.get("customFormatScore", 0))
-    score = best.get("customFormatScore", 0)
-    title = best.get("title", "<unknown>")
-
-    # 5) tell Sonarr to grab it
-    payload = {"guid": best["guid"], "indexerId": best["indexerId"]}
-    grab = SONARR.post(
-        f"{SONARR_URL}/api/v3/release",
-        json=payload, timeout=10
+def grab_best_release(series_id: int, episode_id: int, wait: int = 5) -> None:
+    # 1) trigger the manual search
+    resp = SONARR.post(
+        f"{SONARR_URL}/api/v3/command",
+        json={"name": "EpisodeSearch", "episodeIds": [episode_id]},
+        timeout=10
     )
-    grab.raise_for_status()
-    logging.info(f"⬇️ Grabbed '{best['title']}' (score={best['customFormatScore']})")
+    resp.raise_for_status()
+    logging.info(f"🔍 Fired EpisodeSearch for ep {episode_id}")
+
+    # 2) give Sonarr some time to populate releases
+    time.sleep(wait)
+
+    # 3) retrieve what it found
+    r = SONARR.get(
+        f"{SONARR_URL}/api/v3/release",
+        params={"seriesId": series_id, "episodeIds": episode_id},
+        timeout=10
+    )
+    r.raise_for_status()
+    releases = r.json()
+    if not releases:
+        logging.warning(f"⚠️ No releases found for {series_id} ep {episode_id}")
+        return
+
+    # 4) pick the one with the highest customFormatScore
+    best = max(releases, key=lambda rel: rel.get("customFormatScore", 0))
+    payload = {"guid": best["guid"], "indexerId": best["indexerId"]}
+
+    # 5) post back just the guid/indexerId
+    dl = SONARR.post(
+        f"{SONARR_URL}/api/v3/release",
+        json=payload,
+        timeout=10
+    )
+    dl.raise_for_status()
+    logging.info(f"⬇️ Grabbed '{best.get('title','?')}' (score={best.get('customFormatScore',0)})")
     
 # --- Main Logic ---
 def check_episode(series: dict, episode: dict) -> None:
