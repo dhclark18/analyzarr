@@ -24,7 +24,7 @@ from psycopg2.pool import SimpleConnectionPool
 # CLI & Configuration
 # -----------------------------------------------------------------------------
 
-parser = argparse.ArgumentParser(description="Huntarr: Sonarr mismatch checker")
+parser = argparse.ArgumentParser(description="sonarr-checker")
 parser.add_argument(
     "--force-run",
     action="store_true",
