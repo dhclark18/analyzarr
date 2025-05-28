@@ -14,7 +14,12 @@
                      tag_id=1
                    ) }}"
            class="text-decoration-none text-reset">
-          <div class="card bg-dark text-light h-100 border-secondary">
+          <div class="card h-100 text-light 
+                      {% if row.has_problems %}
+                        bg-danger border-danger
+                      {% else %}
+                        bg-dark  border-secondary
+                      {% endif %}">
             <div class="card-body">
               <h5 class="card-title">{{ row.Title }}</h5>
               <p class="card-text mb-1"><strong>Seasons:</strong> {{ row.Seasons }}</p>
