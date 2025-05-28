@@ -356,7 +356,7 @@ def check_episode(series: dict, episode: dict) -> None:
         if just_tagged:
             logging.info(f"⏩ Threshold reached ({cnt}) → newly tagged {series['title']} {code}")
             try:
-                grab_best_release(series["id"], episode["id"])
+                grab_best_with_push(series["id"], episode["id"])
             except Exception as e:
                 logging.error(f"Failed to grab best release for {series['title']} {code}: {e}")
         else:
