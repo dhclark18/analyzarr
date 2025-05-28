@@ -15,7 +15,7 @@ def get_db_connection():
 
 def fetch_sonarr_series():
     headers = {"X-Api-Key": SONARR_API_KEY}
-    r = requests.get(f"{SONARR_URL}/api/series", headers=headers)
+    r = requests.get(f"{SONARR_URL}/api/v3/series", headers=headers)
     r.raise_for_status()
     data = r.json()
     return [
