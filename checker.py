@@ -242,64 +242,71 @@ def search_episode(episode_id: int) -> None:
     except Exception as e:
         logging.error(f"Failed to search for episode {episode_id}: {e}")
 
-def grab_best_with_push(series_id: int, episode_id: int, wait: int = 5):
+import time
+
+def grab_best_with_push(series_id: int, episode_id: int,
+                        expected_season: int, expected_epnum: int,
+                        wait: int = 5):
     """
-    1) Trigger a manual search for just this episode.
+    1) Trigger a manual search for ONLY this episode.
     2) Wait for Sonarr to populate the release cache.
-    3) Pick the release with the highest customFormatScore.
-    4) POST its downloadUrl via /api/v3/release/push to queue only this episode.
+    3) Fetch the whole cache, then filter to releases JUST
+       for expected_season/expected_epnum.
+    4) Pick the max by customFormatScore and POST its URL
+       via /release/push so only this episode queues.
     """
-    # 1) trigger manual search
-    resp = SONARR.post(
+    # 1) fire one search for this episode
+    SONARR.post(
         f"{SONARR_URL}/api/v3/command",
         json={"name": "EpisodeSearch", "episodeIds": [episode_id]},
         timeout=10
-    )
-    resp.raise_for_status()
-    logging.info(f"🔍 EpisodeSearch fired for episode {episode_id}")  #  [oai_citation:0‡Sonarr](https://sonarr.tv/docs/api/?utm_source=chatgpt.com)
+    ).raise_for_status()
+    logging.info(f"🔍 EpisodeSearch fired for ep {episode_id}")
 
-    # 2) wait briefly for Sonarr to collect results
+    # 2) give Sonarr time to do its thing
     time.sleep(wait)
 
-    # 3) fetch available releases for just this episode
-    r = SONARR.get(
+    # 3) grab the full cache
+    resp = SONARR.get(
         f"{SONARR_URL}/api/v3/release",
-        params={"seriesId": series_id, "episodeIds": episode_id},
         timeout=10
     )
-    r.raise_for_status()
-    releases = r.json()
+    resp.raise_for_status()
+    releases = resp.json()
 
-    if not releases:
-        logging.warning(f"⚠️ No releases found for series {series_id} ep {episode_id}")
+    # 4) filter to only the episode we care about
+    filtered = [
+        r for r in releases
+        if (r.get("seriesId") == series_id
+            and r.get("episodeNumbers") == [expected_epnum])
+    ]
+    if not filtered:
+        logging.warning(f"⚠️ No releases found for S{expected_season:02}E{expected_epnum:02}")
         return
 
-    # pick the one with the highest customFormatScore
-    best = max(releases, key=lambda x: x.get("customFormatScore", 0))
+    best = max(filtered, key=lambda r: r.get("customFormatScore", 0))
     dl_url      = best.get("downloadUrl")
     title       = best.get("title")
     protocol    = best.get("protocol")
     publishDate = best.get("publishDate")
 
     if not dl_url:
-        logging.error("❌ Could not find downloadUrl on best release; aborting")
+        logging.error("❌ Best release had no downloadUrl; aborting")
         return
 
-    # 4) push directly into Sonarr (only this one episode will be queued) 
+    # 5) push only that NZB URL
     payload = {
         "title":       title,
         "downloadUrl": dl_url,
         "protocol":    protocol,
         "publishDate": publishDate
     }
-
-    push = SONARR.post(
+    SONARR.post(
         f"{SONARR_URL}/api/v3/release/push",
         json=payload,
         timeout=10
-    )
-    push.raise_for_status()
-    logging.info(f"⬇️ Queued '{title}' via release/push")  #  [oai_citation:1‡sonarr :: forums](https://forums.sonarr.tv/t/solved-api-release-push-not-found/21132?utm_source=chatgpt.com)
+    ).raise_for_status()
+    logging.info(f"⬇️ Queued '{title}' for S{expected_season:02}E{expected_epnum:02}")
     
 # --- Main Logic ---
 def check_episode(series: dict, episode: dict) -> None:
@@ -356,9 +363,13 @@ def check_episode(series: dict, episode: dict) -> None:
         if just_tagged:
             logging.info(f"⏩ Threshold reached ({cnt}) → newly tagged {series['title']} {code}")
             try:
-                grab_best_with_push(series["id"], episode["id"])
-            except Exception as e:
-                logging.error(f"Failed to grab best release for {series['title']} {code}: {e}")
+                if cnt >= MISMATCH_THRESHOLD and just_tagged:
+                    grab_best_with_push(
+                      series["id"],
+                      episode["id"],
+                      episode["seasonNumber"],
+                      episode["episodeNumber"]
+                    )
         else:
             logging.info(f"⏩ Already tagged {series['title']} {code}; skipping grab")
         return
