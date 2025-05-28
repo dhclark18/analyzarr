@@ -249,17 +249,33 @@ def grab_best_release(series_id: int, episode_id: int, timeout: int = 5) -> None
     """
     # 1) trigger a manual search
     cmd = {"name": "EpisodeSearch", "episodeIds": [episode_id]}
-    SONARR.post(f"{SONARR_URL}/api/v3/command", json=cmd, timeout=10).raise_for_status()
-    logging.info(f"🔍 Manual search triggered for S{episode_id}")
+    resp = SONARR.post(f"{SONARR_URL}/api/v3/command",
+                   json=cmd, timeout=10)
+    resp.raise_for_status()
+    cmd_id = resp.json()["id"]
+    logging.info(f"🔍 Launched search (cmd {cmd_id}) for ep {episode_id}")
 
     # 2) wait for Sonarr to index results
-    time.sleep(timeout)
+    while True:
+        status = SONARR.get(
+            f"{SONARR_URL}/api/v3/command/{cmd_id}", timeout=10
+        ).json()
+        if status["state"] in ("Completed", "Failed", "Cancelled"):
+            break
+        time.sleep(1)
+    logging.info(f"🔍 Search {cmd_id} finished with state {status['state']}")
 
     # 3) fetch available releases for this episode
     params = {"seriesId": series_id, "episodeIds": episode_id}
-    r = SONARR.get(f"{SONARR_URL}/api/v3/release", params=params, timeout=10)
-    r.raise_for_status()
-    releases = r.json()
+    releases = SONARR.get(
+        f"{SONARR_URL}/api/v3/release",
+        params=params, timeout=10
+    ).json()
+    if not releases:
+        logging.warning("⚠️ No releases found after search; aborting grab")
+        return
+
+    best = max(releases, key=lambda r: r.get("customFormatScore", 0))
 
     if not releases:
         logging.warning(f"⚠️ No releases found for series {series_id} ep {episode_id}")
@@ -271,18 +287,13 @@ def grab_best_release(series_id: int, episode_id: int, timeout: int = 5) -> None
     title = best.get("title", "<unknown>")
 
     # 5) tell Sonarr to grab it
-    payload = {
-        "guid":      best["guid"],
-        "indexerId": best["indexerId"]
-    }
-    
-    SONARR.post(
+    payload = {"guid": best["guid"], "indexerId": best["indexerId"]}
+    grab = SONARR.post(
         f"{SONARR_URL}/api/v3/release",
-        json=payload,      # ✅ minimal body
-        timeout=10
-    ).raise_for_status()
-    
-    logging.info(f"⬇️ Grabbed '{best['title']}' (guid={best['guid']})")
+        json=payload, timeout=10
+    )
+    grab.raise_for_status()
+    logging.info(f"⬇️ Grabbed '{best['title']}' (score={best['customFormatScore']})")
     
 # --- Main Logic ---
 def check_episode(series: dict, episode: dict) -> None:
