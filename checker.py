@@ -179,6 +179,101 @@ def remove_tag(key: str, tag_name: str, code: str, series_title: str) -> None:
         logging.error(f"DB error removing tag '{tag_name}' from {key} {code}: {e}")
 
 # --- Utils & Sonarr API ---
+def arr_request(api_url: str, api_key: str, api_timeout: int, endpoint: str, method: str = "GET", data: Dict = None) -> Any:
+    """
+    Make a request to the Sonarr API.
+    
+    Args:
+        api_url: The base URL of the Sonarr API
+        api_key: The API key for authentication
+        api_timeout: Timeout for the API request
+        endpoint: The API endpoint to call
+        method: HTTP method (GET, POST, PUT, DELETE)
+        data: Optional data payload for POST/PUT requests
+    
+    Returns:
+        The parsed JSON response or None if the request failed
+    """
+    try:
+        if not api_url or not api_key:
+            sonarr_logger.error("No URL or API key provided")
+            return None
+        
+        # Ensure api_url has a scheme
+        if not (api_url.startswith('http://') or api_url.startswith('https://')):
+            sonarr_logger.error(f"Invalid URL format: {api_url} - URL must start with http:// or https://")
+            return None
+            
+        # Construct the full URL properly
+        full_url = f"{api_url.rstrip('/')}/api/v3/{endpoint.lstrip('/')}"
+        
+        sonarr_logger.debug(f"Making {method} request to: {full_url}")
+        
+        # Set up headers with User-Agent to identify Huntarr
+        headers = {
+            "X-Api-Key": api_key,
+            "Content-Type": "application/json",
+            "User-Agent": "Huntarr/1.0 (https://github.com/plexguide/Huntarr.io)"
+        }
+        
+        # Log the User-Agent for debugging
+        sonarr_logger.debug(f"Using User-Agent: {headers['User-Agent']}")
+        
+        # Get SSL verification setting
+        verify_ssl = get_ssl_verify_setting()
+        
+        if not verify_ssl:
+            sonarr_logger.debug("SSL verification disabled by user setting")
+        
+        try:
+            if method.upper() == "GET":
+                response = session.get(full_url, headers=headers, timeout=api_timeout, verify=verify_ssl)
+            elif method.upper() == "POST":
+                response = session.post(full_url, headers=headers, json=data, timeout=api_timeout, verify=verify_ssl)
+            elif method.upper() == "PUT":
+                response = session.put(full_url, headers=headers, json=data, timeout=api_timeout, verify=verify_ssl)
+            elif method.upper() == "DELETE":
+                response = session.delete(full_url, headers=headers, timeout=api_timeout, verify=verify_ssl)
+            else:
+                sonarr_logger.error(f"Unsupported HTTP method: {method}")
+                return None
+            
+            # Check for successful response
+            response.raise_for_status()
+            
+            # Check if there's any content before trying to parse JSON
+            if response.content:
+                try:
+                    return response.json()
+                except json.JSONDecodeError as jde:
+                    # Log detailed information about the malformed response
+                    sonarr_logger.error(f"Error decoding JSON response from {endpoint}: {str(jde)}")
+                    sonarr_logger.error(f"Response status code: {response.status_code}")
+                    sonarr_logger.error(f"Response content (first 200 chars): {response.content[:200]}")
+                    return None
+            else:
+                sonarr_logger.debug(f"Empty response content from {endpoint}, returning empty dict")
+                return {}
+                
+        except requests.exceptions.RequestException as e:
+            # Add detailed error logging
+            error_details = str(e)
+            if hasattr(e, 'response') and e.response is not None:
+                error_details += f", Status Code: {e.response.status_code}"
+                if e.response.content:
+                    error_details += f", Content: {e.response.content[:200]}"
+            
+            sonarr_logger.error(f"Error during {method} request to {endpoint}: {error_details}")
+            return None
+    except Exception as e:
+        # Catch all exceptions and log them with traceback
+        error_msg = f"CRITICAL ERROR in arr_request: {str(e)}"
+        sonarr_logger.error(error_msg)
+        sonarr_logger.error(f"Full traceback: {traceback.format_exc()}")
+        print(error_msg, file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
+        return None
+        
 def normalize_title(text: str) -> str:
     if not text:
         return ""
@@ -242,46 +337,36 @@ def search_episode(episode_id: int) -> None:
     except Exception as e:
         logging.error(f"Failed to search for episode {episode_id}: {e}")
 
-import time
+def grab_best_nzb(api_url: str, api_key: str,
+                 api_timeout: int, series_id: int,
+                 episode_id: int, wait: int = 5):
+    # 1) fire off the search
+    cmd = arr_request(
+        api_url, api_key, api_timeout,
+        "command",
+        method="POST",
+        data={"name": "EpisodeSearch", "episodeIds": [episode_id]}
+    )
+    if not cmd or "id" not in cmd:
+        log.error("Failed to start EpisodeSearch")
+        return
+    cmd_id = cmd["id"]
+    log.info(f"🔍 EpisodeSearch started (id={cmd_id}) for ep {episode_id}")
 
-def grab_best_with_push(series_id: int, episode_id: int,
-                        expected_season: int, expected_epnum: int,
-                        wait: int = 5):
-    """
-    1) Trigger a manual search for ONLY this episode.
-    2) Wait for Sonarr to populate the release cache.
-    3) Fetch the whole cache, then filter to releases JUST
-       for expected_season/expected_epnum.
-    4) Pick the max by customFormatScore and POST its URL
-       via /release/push so only this episode queues.
-    """
-    # 1) fire one search for this episode
-    SONARR.post(
-        f"{SONARR_URL}/api/v3/command",
-        json={"name": "EpisodeSearch", "episodeIds": [episode_id]},
-        timeout=10
-    ).raise_for_status()
-    logging.info(f"🔍 EpisodeSearch fired for ep {episode_id}")
-
-    # 2) give Sonarr time to do its thing
+    # 2) wait for Sonarr to finish collecting results
     time.sleep(wait)
 
-    # 3) grab the full cache
-    resp = SONARR.get(
-        f"{SONARR_URL}/api/v3/release",
-        timeout=10
-    )
-    resp.raise_for_status()
-    releases = resp.json()
+    # 3) fetch ONLY that episode’s releases
+    #    note the singular param `episodeId`
+    releases = arr_request(
+        api_url, api_key, api_timeout,
+        f"release?episodeId={episode_id}"
+    ) or []
 
-    # 4) filter to only the episode we care about
-    filtered = [
-        r for r in releases
-        if (r.get("seriesId") == series_id
-            and r.get("episodeNumbers") == [expected_epnum])
-    ]
+    # 4) pick best by customFormatScore
+    filtered = [r for r in releases if r.get("seriesId") == series_id]
     if not filtered:
-        logging.warning(f"⚠️ No releases found for S{expected_season:02}E{expected_epnum:02}")
+        log.warning(f"No releases found for S{series_id}/{episode_id}")
         return
 
     best = max(filtered, key=lambda r: r.get("customFormatScore", 0))
@@ -291,22 +376,26 @@ def grab_best_with_push(series_id: int, episode_id: int,
     publishDate = best.get("publishDate")
 
     if not dl_url:
-        logging.error("❌ Best release had no downloadUrl; aborting")
+        log.error("Found best release but no downloadUrl present")
         return
 
-    # 5) push only that NZB URL
-    payload = {
+    # 5) push that single NZB URL into Sonarr
+    push_payload = {
         "title":       title,
         "downloadUrl": dl_url,
         "protocol":    protocol,
         "publishDate": publishDate
     }
-    SONARR.post(
-        f"{SONARR_URL}/api/v3/release/push",
-        json=payload,
-        timeout=10
-    ).raise_for_status()
-    logging.info(f"⬇️ Queued '{title}' for S{expected_season:02}E{expected_epnum:02}")
+    resp = arr_request(
+        api_url, api_key, api_timeout,
+        "release/push",
+        method="POST",
+        data=push_payload
+    )
+    if resp is not None:
+        log.info(f"⬇️ Queued '{title}' via release/push")
+    else:
+        log.error("Failed to push release into Sonarr")
     
 # --- Main Logic ---
 def check_episode(series: dict, episode: dict) -> None:
@@ -362,15 +451,10 @@ def check_episode(series: dict, episode: dict) -> None:
         just_tagged = add_tag(key, SPECIAL_TAG_NAME, code, nice_title)
         if just_tagged:
             logging.info(f"⏩ Threshold reached ({cnt}) → newly tagged {series['title']} {code}")
-            try:
-                grab_best_with_push(
-                    series["id"],
-                    episode["id"],
-                    episode["seasonNumber"],
-                    episode["episodeNumber"]
-                )
-            except Exception as e:
-                logging.error(f"Failed to queue best release for {series['title']} {code}: {e}")
+            grab_best_nzb(
+                SONARR_URL, SONARR_API_KEY, SONARR_TIMEOUT,
+                series["id"], episode["id"]
+            )
         else:
             logging.info(f"⏩ Already tagged {series['title']} {code}; skipping grab")
         return
