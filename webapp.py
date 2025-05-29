@@ -31,29 +31,34 @@ def fetch_sonarr_series():
 
 @app.route("/")
 def index():
-    # 1) Get your Sonarr library
+    # — fetch Sonarr library as before —
     try:
         library_rows = fetch_sonarr_series()
     except Exception as e:
         library_rows = [{"Title": f"Error: {e}", "Seasons": "", "Monitored": ""}]
 
-    # 2) Find which series have tags in your DB
+    # — open a DB connection once —
     conn = get_db_connection()
     with conn.cursor() as cur:
-        cur.execute("""
-            SELECT DISTINCT series_title
-              FROM episode_tags;
-        """)
-        problem_titles = { r["series_title"] for r in cur.fetchall() }
+        # 1) Which series have problematic episodes?
+        cur.execute("SELECT DISTINCT series_title FROM episode_tags;")
+        problem_titles = {r["series_title"] for r in cur.fetchall()}
+
+        # 2) Grab the one tag_id from tags (assumes only one row)
+        cur.execute("SELECT id FROM tags LIMIT 1;")
+        single_tag_id = cur.fetchone()["id"]
     conn.close()
 
-    # 3) Annotate each library row
+    # — annotate each library row —
     for row in library_rows:
-        # True if this series has any problematic episodes
         row["has_problems"] = row["Title"] in problem_titles
 
-    # 4) Render only the library cards
-    return render_template("index.html", library_rows=library_rows)
+    # — render, passing that tag_id into the template —
+    return render_template(
+        "index.html",
+        library_rows=library_rows,
+        tag_id=single_tag_id
+    )
 
 @app.route("/series/<path:series_name>/tag/<int:tag_id>")
 def tagged_episodes(series_name, tag_id):
