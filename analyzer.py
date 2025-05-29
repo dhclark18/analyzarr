@@ -130,7 +130,6 @@ def get_mismatch_count(conn, key: str) -> int:
 # Tag Helpers
 # -----------------------------------------------------------------------------
 
-@with_conn
 def ensure_tag(conn, name: str) -> int:
     with conn.cursor() as cur:
         cur.execute(
