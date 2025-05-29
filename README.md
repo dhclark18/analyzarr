@@ -12,7 +12,6 @@ This Docker-based tool verifies that downloaded filenames match official titles 
 - Supports FORCED_RUN mode. When false it will just verify that downloaded TV episode filenames match official titles without triggering a deletion and redownload.
 
 ## Requirements
-- Sonarr file name format must be {Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{...}]
 - Only works with custom Sabnzbd currently because it requires a prequeue script specifically designed for Sabnzbd and psycopg2
   
 ## Setup
