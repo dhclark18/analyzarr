@@ -9,7 +9,7 @@ This Docker-based tool verifies that downloaded filenames match official titles 
 - Creates database of problematic episodes for you to manually intervene.
 - Uses database to create webpage depicting all the tv series in your library and which ones have problematic episodes.
 - Supports real-time directory watching.
-- Supports FORCED_RUN mode. When false it will just verify that downloaded TV episode filenames match official titles without triggering a deletion and redownload.
+- Supports FORCED_RUN mode. When false it will just verify that downloaded episodes' filename match official titles without triggering a deletion and redownload.
 
 ## Requirements
 - Only works with custom Sabnzbd currently because it requires a prequeue script specifically designed for Sabnzbd and psycopg2
