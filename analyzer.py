@@ -434,6 +434,129 @@ def extract_scene_title(scene_name: str) -> str:
     # ── Fallback: if no SxxEyy found, just replace punctuation with spaces
     return re.sub(r"[.\-_]+", " ", scene_name)
  
+def delete_episode_file(client: SonarrClient, file_id: int):
+    """
+    Delete the given episode file, with extended timeout and post-delete verification.
+    """
+    url = f"{client.base_url}/api/v3/episodefile/{file_id}"
+    # we’ll use a tuple (connect_timeout, read_timeout)
+    timeout = (client.timeout, client.timeout * 3)
+
+    try:
+        resp = client.session.delete(url, timeout=timeout)
+        resp.raise_for_status()
+        logging.info(f"🗑️ Deleted episode file ID {file_id}")
+    except ReadTimeout:
+        logging.warning(f"⌛ Timeout deleting file ID {file_id}; verifying deletion…")
+        try:
+            check = client.session.get(url, timeout=(client.timeout, client.timeout))
+            if check.status_code == 404:
+                logging.info(f"✅ Deletion of file ID {file_id} confirmed after timeout")
+            else:
+                logging.error(f"❌ File ID {file_id} still present (status {check.status_code})")
+        except RequestException as e:
+            logging.error(f"❌ Error verifying deletion of {file_id}: {e}")
+    except RequestException as e:
+        logging.exception(f"❌ Failed to delete file ID {file_id}: {e}")
+     
+def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: int = 5):
+    """
+    1) Start Sonarr's internal EpisodeSearch for this episode.
+    2) Sleep for `wait` seconds to let Sonarr collect results.
+    3) GET /release?episodeId=<episode_id> → list of releases.
+    4) Filter to releases whose mappedSeriesId == series_id.
+    5) Sort those by customFormatScore DESC, take top 10.
+    6) For each of those 10, compute confidence(expected_title, release_title).
+       Pick the release with the highest confidence.
+    7) If there is already a file for this episode, delete it from Sonarr.
+    8) POST /release/push with the chosen release’s downloadUrl, title, etc.
+    """
+    # ── Step 1: start the EpisodeSearch command ────────────────────────────────
+    cmd = client.post("command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
+    if not cmd or "id" not in cmd:
+        logging.info("Failed to start EpisodeSearch")
+        return
+
+    cmd_id = cmd["id"]
+    logging.info(f"🔍 EpisodeSearch started (id={cmd_id}) for episode {episode_id}")
+
+    # ── Step 2: wait for Sonarr to collect results ─────────────────────────────
+    time.sleep(wait)
+
+    # ── Step 3: fetch all releases for that episode ────────────────────────────
+    releases = client.get(f"release?episodeId={episode_id}") or []
+    logging.debug(f"raw releases payload: {releases!r}")
+
+    # ── Step 4: keep only those whose mappedSeriesId matches our series_id ─────
+    candidates = [r for r in releases if r.get("mappedSeriesId") == series_id]
+    logging.info(f"Found {len(candidates)} candidate releases for series {series_id}")
+
+    if not candidates:
+        logging.warning("No releases found to pick from")
+        return
+
+    # ── Step 5: sort by customFormatScore (descending), take top 10 ────────────
+    candidates.sort(key=lambda r: r.get("customFormatScore", 0), reverse=True)
+    top10 = candidates[:10]
+    logging.info(f"Considering top {len(top10)} by customFormatScore")
+
+    # ── Step 6: fetch the episode’s expected title from Sonarr ──────────────────
+    ep_details = client.get(f"episode/{episode_id}") or {}
+    expected_title = ep_details.get("title", "")
+    if not expected_title:
+        logging.info(f"Could not retrieve expected title for episode {episode_id}")
+        return
+
+    # Compute confidence for each candidate’s release title
+    best_candidate = None
+    best_confidence = -1.0
+
+    for r in top10:
+        release_title = r.get("title", "")
+        conf = compute_confidence(expected_title, release_title)
+        logging.debug(f"Release '{release_title[:50]}...' → confidence {conf:.2f}")
+        if conf > best_confidence:
+            best_confidence = conf
+            best_candidate = r
+
+    if not best_candidate:
+        logging.info("Failed to pick a best candidate by confidence")
+        return
+
+    logging.debug(
+        f"Chose release '{best_candidate.get('title')}' "
+        f"with confidence {best_confidence:.2f} "
+        f"and customFormatScore {best_candidate.get('customFormatScore')}"
+    )
+
+    # ── Step 7: remove any existing episode file in Sonarr ────────────────────
+    ep = client.get(f"episode/{episode_id}") or {}
+    file_id = ep.get("episodeFileId")
+    if file_id:
+        try:
+            delete_episode_file(client, file_id)
+            logging.info(f"Deleted existing episode file {file_id}")
+        except Exception:
+            logging.exception(f"Failed to delete existing file {file_id}; continuing anyway")
+
+    # ── Step 8: push the chosen NZB into Sonarr ─────────────────────────────────
+    dl_url = best_candidate.get("downloadUrl")
+    if not dl_url:
+        logging.error("Best candidate has no downloadUrl")
+        return
+
+    payload = {
+        "title":       best_candidate.get("title"),
+        "downloadUrl": dl_url,
+        "protocol":    best_candidate.get("protocol"),
+        "publishDate": best_candidate.get("publishDate"),
+    }
+    pushed = client.post("release/push", payload)
+    if pushed is not None:
+        logging.info(f"⬇️ Queued '{best_candidate.get('title')}' via release/push")
+    else:
+        logging.info("Failed to push release into Sonarr")
+     
 # -----------------------------------------------------------------------------
 # Core Logic
 # -----------------------------------------------------------------------------
