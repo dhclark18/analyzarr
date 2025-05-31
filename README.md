@@ -21,7 +21,7 @@ This Docker-based tool verifies that downloaded episode filenames match official
 
 1. Create new docker stack using provided docker-compose.yml and modify variables as needed (including END_MARKERS).
 2. Run stack for first time.
-3. Go to http://[your ip address]:5000 to see problematic episodes. Could take a couple of seconds to fully scan library depending on size. 
+3. Go to http://[your ip address]:5000 to see breakdown of results. Could take a couple of seconds to fully scan library depending on size. 
 
 ## Disclaimer
 
