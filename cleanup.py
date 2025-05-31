@@ -181,7 +181,18 @@ def cleanup_deleted(conn, sonarr_client: SonarrClient):
         conn.commit()
         cur.close()
         return
+    
+    cur.execute("SELECT key FROM episodes;")
+    db_keys = {row[0] for row in cur.fetchall()}
 
+    missing_from_sonarr = db_keys - live_keys
+    if missing_from_sonarr:
+        logging.info("Keys in DB but NOT in Sonarr (to be deleted):")
+        for k in sorted(missing_from_sonarr):
+            logging.info("   ✂️  %s", k)
+    else:
+        logging.info("No orphaned keys found; DB is in sync.")
+        
     # 4) Bulk delete any episodes not in live_keys
     placeholders = ",".join(["%s"] * len(live_keys))
     delete_sql = sql.SQL("""
