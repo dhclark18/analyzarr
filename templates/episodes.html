@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Episodes – {{ series_title }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-4">🎞️ Episodes in {{ series_title }}</h1>
+  <a href="{{ url_for('index') }}" class="btn btn-outline-light mb-3">← Back to series</a>
+
+  {% for season, eps in seasons.items() %}
+    <h2 class="mt-5 mb-3">Season {{ season }}</h2>
+    <table class="table table-dark table-striped table-bordered align-middle">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Code</th>
+          <th>Expected Title</th>
+          <th>Actual Title</th>
+          <th>Confidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ep in eps %}
+          <tr>
+            <td class="text-center">
+              {% set tag_list = ep.tags.split(',') if ep.tags else [] %}
+              {% if 'matched' in tag_list %}
+                <i class="bi bi-check-circle-fill text-success" title="Matched"></i>
+              {% elif 'problematic-episode' in tag_list %}
+                <i class="bi bi-exclamation-circle-fill text-danger" title="Problematic"></i>
+              {% else %}
+                <i class="bi bi-question-circle-fill text-secondary" title="Untagged"></i>
+              {% endif %}
+            </td>
+            <td>{{ ep.code }}</td>
+            <td>{{ ep.expected_title }}</td>
+            <td>{{ ep.actual_title }}</td>
+            <td>{{ ep.confidence }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endfor %}
+{% endblock %}
