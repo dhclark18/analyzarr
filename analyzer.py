@@ -29,7 +29,7 @@ SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989")
 SONARR_API_KEY     = os.getenv("SONARR_API_KEY") or sys.exit("❌ SONARR_API_KEY not set")
 API_TIMEOUT        = int(os.getenv("API_TIMEOUT", "10"))
 TVDB_FILTER        = os.getenv("TVDB_ID")
-
+LOG_LEVEL          = os.getenv("LOG_LEVEL")
 _raw = os.getenv("SEASON_FILTER", "")
 if _raw:
     try:
@@ -48,8 +48,14 @@ LOG_DIR = os.getenv("LOG_PATH", "/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "analyzer.log")
 
+# Read LOG_LEVEL from env (default to "INFO" if not set)
+level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+
+# Convert the string name to an actual logging level (int), defaulting to INFO if unrecognized
+numeric_level = getattr(logging, level_name, logging.INFO)
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=numeric_level,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding="utf-8"),
@@ -284,7 +290,7 @@ END_MARKERS = {
 def collapse_numbers(text: str) -> str:
     """
     Replace each contiguous run of pure number-words with its digit equivalent,
-    leaving all other words (like "Candles") intact.
+    leaving all other words intact.
     """
     def _repl(match):
         phrase = match.group(0)
@@ -316,7 +322,7 @@ def has_season_episode(scene_name: str) -> bool:
 def is_missing_title(scene_name: str, expected_title: str) -> bool:
     """
     Return True if there was no real title between SxxEyy and the metadata,
-    or if the only token is a numeric year/number that doesn’t match the expected.
+    or if the only token is a numeric year/number that doesn’t match the expected or is just "Part X".
     """
     raw = extract_scene_title(scene_name).strip()
     expected_norm = normalize_title(expected_title)
