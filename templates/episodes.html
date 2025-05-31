@@ -15,7 +15,7 @@
           <th>Expected Title</th>
           <th>Actual Title</th>
           <th>Confidence</th>
-          <th>Actions</th>  {# ← new header #}
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -36,18 +36,21 @@
             <td>{{ ep.actual_title }}</td>
             <td>{{ ep.confidence }}</td>
 
-            <!-- ───── New “Auto-Fix” button (only for problematic) ─────────────── -->
             <td>
-              {% if 'problematic-episode' in tag_list %}
+              {% if 'problematic-episode' in tag_list and ep.sonarr_id %}
                 <form
-                  action="{{ url_for('auto_fix', series_id=series_id, code=ep.code) }}"
+                  action="{{ url_for('auto_fix', series_id=series_id) }}"
                   method="post"
                   class="d-inline"
                 >
+                  <!-- send the exact Sonarr episode ID instead of code -->
+                  <input type="hidden" name="episode_id" value="{{ ep.sonarr_id }}">
                   <button type="submit" class="btn btn-sm btn-warning">
                     <i class="bi bi-tools"></i> Auto-Fix
                   </button>
                 </form>
+              {% elif 'problematic-episode' in tag_list and not ep.sonarr_id %}
+                <span class="text-warning small">No Sonarr ID</span>
               {% endif %}
             </td>
           </tr>
