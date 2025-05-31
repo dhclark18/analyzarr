@@ -28,9 +28,9 @@ services:
     ports:
       - 5432:5432
     environment:
-      POSTGRES_USER: sonarr
+      POSTGRES_USER: [user]       
       POSTGRES_PASSWORD: [password]
-      POSTGRES_DB: analyzarr
+      POSTGRES_DB: [DB name]
     volumes:
       - pgdata:/var/lib/postgresql/data
       
