@@ -5,4 +5,4 @@ set -e
 python watcher.py &
 
 # then run the Flask UI in the foreground
-python webapp.py
+python app.py
