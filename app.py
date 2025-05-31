@@ -90,7 +90,7 @@ def view_series(series_id):
     if not info:
         abort(404, description="Series not found in Sonarr")
 
-    # — pull episodes + tags from Postgres (same SQL as before) —
+    # — pull episodes + tags from Postgres (same SQL) —
     conn = get_db()
     cur  = conn.cursor()
     cur.execute("""
@@ -117,12 +117,13 @@ def view_series(series_id):
         season_num = int(ep["code"][1:3])
         seasons.setdefault(season_num, []).append(ep)
 
+    # ─── Pass series_id into the template ───────────────────────────────────
     return render_template(
         "episodes.html",
+        series_id=series_id,            # ← NEW
         series_title=info["title"],
         seasons=seasons
     )
-
 
 @app.route("/cleanup", methods=["POST"])
 def cleanup_route():
