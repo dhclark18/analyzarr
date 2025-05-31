@@ -25,6 +25,7 @@ if not SONARR_API_KEY:
 SONARR_HEADERS  = {"X-Api-Key": SONARR_API_KEY}
 SONARR_SESSION  = requests.Session()
 SONARR_SESSION.headers.update(SONARR_HEADERS)
+API_TIMEOUT    = int(os.getenv("API_TIMEOUT", "10"))
 
 # ─── Instantiate a single SonarrClient for cleanup ───────────────────────────
 #    Reuse this for every “Purge” click.
