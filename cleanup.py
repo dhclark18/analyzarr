@@ -17,6 +17,9 @@ from psycopg2.pool import SimpleConnectionPool
 from psycopg2 import sql
 from word2number import w2n
 
+# ─── Import the shared SonarrClient from analyzer.py ─────────────────────────
+from analyzer import SonarrClient
+
 # ─── Configuration ─────────────────────────────────────────────────────────────
 
 DATABASE_URL   = os.getenv("DATABASE_URL") or sys.exit("❌ DATABASE_URL not set")
@@ -56,36 +59,6 @@ def with_conn(fn):
         finally:
             db_pool.putconn(conn)
     return wrapper
-
-# ─── Sonarr API Client ────────────────────────────────────────────────────────
-
-class SonarrClient:
-    def __init__(self, base_url, api_key, timeout=10):
-        self.base_url = base_url.rstrip("/")
-        self.timeout  = timeout
-        self.session  = requests.Session()
-        self.session.headers.update({
-            "X-Api-Key": api_key,
-            "User-Agent": "cleanup-script"
-        })
-
-    def request(self, endpoint, method="GET", json_data=None, params=None):
-        url = f"{self.base_url}/api/v3/{endpoint.lstrip('/')}"
-        try:
-            resp = self.session.request(
-                method, url,
-                json=json_data,
-                params=params,
-                timeout=self.timeout
-            )
-            resp.raise_for_status()
-            return resp.json() if resp.content else []
-        except Exception:
-            logging.exception(f"🚨 Sonarr API error on {method} {endpoint} {params or ''}")
-            return None
-
-    def get(self, endpoint, params=None):
-        return self.request(endpoint, "GET", params=params)
 
 # ─── Utility: Normalize Series Titles ─────────────────────────────────────────
 
