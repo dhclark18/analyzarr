@@ -1,29 +1,28 @@
 # Analyzarr
 
-This Docker-based tool verifies that downloaded filenames match official titles (via TVDb) and triggers Sonarr to re-download them if they don’t. It also creates a database to view problematic episodes for manual intervention. 
+This Docker-based tool verifies that downloaded episode filenames match official titles (via TVDb). The webpage provides a detailed breakdown of each episode so you can see exactly which episodes are potentially problematic. This was created this becuase every so often a string of episodes (typically after a multi-part episode) would be offset due to the various episode numberings some shows have. This will catch those situations in addition to random incorrectly labeled nzb files.  
 
 ## Features
 
 - Auto-checks episode filenames against TVDb
-- Attempts 3 times to find nzb with correct title. Afterwards it flags the episode as problematic and just requests the nzb release with the highest custom format. Once an episode is flagged as problematic it won't be tocuhed by the matching software.
-- Creates database of problematic episodes for you to manually intervene.
-- Uses database to create webpage depicting all the tv series in your library and which ones have problematic episodes.
+- Creates database containing various parameters for each episode.
+- Uses database to create webpage that cleanly organizes everything by series and provides detailed information about each episode to help determine if episodes need redownloading.
 - Supports real-time directory watching.
-- Supports FORCED_RUN mode. When false it will just verify that downloaded episodes' filename match official titles without triggering a deletion and redownload.
+- Ability to only scan specific series and seasons.
+- Fuzzy matching to determine if episode titles match expected title.
+- Customizable END_MARKERS to help improve accuracy. Hihgly recommend adding a few extra words that commonly come right after the episode titles but cannot be named or hard coded for various reasons.
+- Purge button to remove deleted episodes or series from the database.
 
 ## Requirements
-- Only works with custom Sabnzbd currently because it requires a prequeue script specifically designed for Sabnzbd and psycopg2.
+
+- Only guarenteed to work with usenet files right now. Use with torrent files is untested.    
   
 ## Setup
 
-1. Download sabnzbd_prequeue_script.py and edit variables.
-2. Set up Sabnzbd to use script as a prequeue script.
-3. Build custom Sabznbd so it has psycopg2.
-4. Create new docker stack using provided docker-compose.yml and modify variables as needed.
-5. Run stack for first time
-6. Restart stack (issue with database not being initialized on first run)
-7. Go to http://[your ip address]:5000 to see problematic episodes.
-8. Enjoy. I recommend trying it out on one season in a series since this could trigger a large deletion and download if ran on entire library.
+1. Create new docker stack using provided docker-compose.yml and modify variables as needed (including END_MARKERS).
+2. Run stack for first time.
+3. Go to http://[your ip address]:5000 to see problematic episodes. Could take a couple of seconds to fully scan library depending on size. 
 
 ## Disclaimer
-This is a work in progress. I am a novice coder with no formal training and this was created with the help of AI. Its mainly a fun project because I noticed sometimes Sonarr would get a mislabeled nzb and I wouldnt find out until I tried to play it in Plex. Use at your own risk. Feel free to provide feedback. 
+
+This is a work in progress. I have no formal coding training and used AI to help. Its mainly a fun project. Use at your own risk. Feel free to provide feedback. 
