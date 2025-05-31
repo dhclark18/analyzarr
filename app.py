@@ -25,7 +25,7 @@ SONARR_SESSION  = requests.Session()
 SONARR_SESSION.headers.update(SONARR_HEADERS)
 
 # ─── Instantiate a single SonarrClient for cleanup ───────────────────────────
-#    We’ll reuse this for every “Refresh” click.
+#    Reuse this for every “Purge” click.
 sonarr_client = SonarrClient(SONARR_URL, SONARR_API_KEY, timeout=API_TIMEOUT)
 
 # ─── Database helper ──────────────────────────────────────────────────────────
