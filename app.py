@@ -9,7 +9,7 @@ import logging
 
 # ─── Import your standalone cleanup logic and ────────────────────
 #    (Assumes you have a cleanup.py next to this file that defines cleanup_deleted,
-from cleanup import cleanup_deleted, SONARR_URL, SONARR_API_KEY, API_TIMEOUT
+from cleanup import cleanup_deleted
 
 app = Flask(__name__)
 # Secret key required for flash() to work
