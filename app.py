@@ -6,6 +6,7 @@ from flask import Flask, render_template, abort, flash, redirect, url_for, reque
 from analyzer import SonarrClient, grab_best_nzb, delete_episode_file, compute_confidence
 import re
 import logging
+import threading
 
 # ─── Import your standalone cleanup logic and ────────────────────
 #    (Assumes you have a cleanup.py next to this file that defines cleanup_deleted,
