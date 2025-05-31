@@ -5,8 +5,7 @@ Features:
  - Pooled PostgreSQL connections (psycopg2 SimpleConnectionPool)
  - Modular SonarrClient with unified error handling, heavily based on Huntarr project
  - Reads mismatch counts from an external incrementer script
- - Tags & auto-grabs when count ≥ threshold, using keys derived from sceneName
- - Optional force-run to delete and requeue instead of tagging
+ - Tags episode as matched or porblematic
 """
 
 import os
@@ -18,6 +17,8 @@ import unicodedata
 from requests.exceptions import ReadTimeout, RequestException
 import requests
 from psycopg2.pool import SimpleConnectionPool
+from rapidfuzz.fuzz import token_sort_ratio
+from word2number import w2n
 
 # -----------------------------------------------------------------------------
 # CLI & Configuration
@@ -27,10 +28,7 @@ DATABASE_URL       = os.getenv("DATABASE_URL") or sys.exit("❌ DATABASE_URL not
 SONARR_URL         = os.getenv("SONARR_URL", "http://localhost:8989")
 SONARR_API_KEY     = os.getenv("SONARR_API_KEY") or sys.exit("❌ SONARR_API_KEY not set")
 API_TIMEOUT        = int(os.getenv("API_TIMEOUT", "10"))
-FORCE_RUN          = os.getenv("FR_RUN", "false").lower() == "true"
 TVDB_FILTER        = os.getenv("TVDB_ID")
-SPECIAL_TAG_NAME   = os.getenv("SPECIAL_TAG_NAME", "problematic-title")
-MISMATCH_THRESHOLD = int(os.getenv("MISMATCH_THRESHOLD", "3"))
 
 _raw = os.getenv("SEASON_FILTER", "")
 if _raw:
@@ -51,7 +49,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "analyzer.log")
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding="utf-8"),
@@ -81,38 +79,41 @@ def with_conn(fn):
 
 @with_conn
 def init_db(conn):
-    """
-    Ensure only the tagging tables exist; mismatch counts are managed externally.
-    """
-    ddl = [
-        """
+    cur = conn.cursor()
+
+    # 1) episodes must exist before anything references it
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS episodes (
+          key            TEXT PRIMARY KEY,
+          code           TEXT NOT NULL,
+          series_title   TEXT NOT NULL,
+          expected_title TEXT NOT NULL,
+          actual_title   TEXT NOT NULL,
+          confidence     TEXT NOT NULL
+        );
+    """)
+
+    # 2) tags (no dependencies)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS tags (
           id   SERIAL PRIMARY KEY,
-          name TEXT   UNIQUE NOT NULL
+          name TEXT UNIQUE NOT NULL
         );
-        """,
-        """
+    """)
+
+    # 3) episode_tags references both episodes and tags
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS episode_tags (
-          key           TEXT NOT NULL,
-          tag_id        INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-          code          TEXT NOT NULL,
-          series_title  TEXT NOT NULL,
-          PRIMARY KEY (key, tag_id)
+          episode_key TEXT NOT NULL
+            REFERENCES episodes(key) ON DELETE CASCADE,
+          tag_id      INTEGER NOT NULL
+            REFERENCES tags(id) ON DELETE CASCADE,
+          PRIMARY KEY (episode_key, tag_id)
         );
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS mismatch_tracking (
-          key           TEXT PRIMARY KEY,
-          count         INTEGER NOT NULL DEFAULT 0,
-          last_mismatch TIMESTAMP
-        );
-        """,
-    ]
-    with conn.cursor() as cur:
-        for stmt in ddl:
-            cur.execute(stmt)
+    """)
+
     conn.commit()
-    logging.info("✅ Database schema (tags) ensured")
+    cur.close()
 
 # -----------------------------------------------------------------------------
 # Mismatch Count Reader
@@ -130,50 +131,88 @@ def get_mismatch_count(conn, key: str) -> int:
 # Tag Helpers
 # -----------------------------------------------------------------------------
 
-def ensure_tag(conn, name: str) -> int:
+def ensure_tag(conn, tag_name: str) -> int:
+    """
+    Make sure a tag with name=tag_name exists in `tags`.
+    Return its id (creating the row if needed).
+    """
     with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO tags (name) VALUES (%s) ON CONFLICT DO NOTHING",
-            (name,)
-        )
-        cur.execute("SELECT id FROM tags WHERE name = %s", (name,))
+        cur.execute("""
+            INSERT INTO tags (name)
+            VALUES (%s)
+            ON CONFLICT (name) DO NOTHING
+            RETURNING id
+        """, (tag_name,))
+        row = cur.fetchone()
+        if row:
+            return row[0]
+
+        # If it already existed, fetch its id
+        cur.execute("SELECT id FROM tags WHERE name = %s", (tag_name,))
         return cur.fetchone()[0]
 
 @with_conn
-def add_tag(conn, key: str, tag_name: str, code: str, series_title: str) -> bool:
+def add_tag(conn, episode_key: str, tag_name: str) -> bool:
+    """
+    Attach tag_name to episode_key.
+    Returns True if a new episode_tags row was created.
+    """
     tag_id = ensure_tag(conn, tag_name)
+
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO episode_tags (key, tag_id, code, series_title)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (key, tag_id) DO NOTHING
-            """,
-            (key, tag_id, code, series_title)
-        )
-        inserted = cur.rowcount == 1
+        cur.execute("""
+            INSERT INTO episode_tags (episode_key, tag_id)
+            VALUES (%s, %s)
+            ON CONFLICT (episode_key, tag_id) DO NOTHING
+        """, (episode_key, tag_id))
+        inserted = cur.rowcount > 0
+
     conn.commit()
     return inserted
 
 @with_conn
-def remove_tag(conn, key: str, tag_name: str, code: str, series_title: str) -> bool:
+def remove_tag(conn, episode_key: str, tag_name: str) -> bool:
+    """
+    Remove the given tag from an episode.
+    Returns True if a row was deleted, False otherwise.
+    """
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            DELETE FROM episode_tags et
-              USING tags t
-             WHERE et.tag_id       = t.id
-               AND et.key          = %s
-               AND t.name          = %s
-               AND et.code         = %s
-               AND et.series_title = %s
-            """,
-            (key, tag_name, code, series_title)
-        )
-        deleted = cur.rowcount == 1
+        # Attempt to delete via a sub‐select on tags.name
+        cur.execute("""
+            DELETE FROM episode_tags
+             WHERE episode_key = %s
+               AND tag_id = (
+                   SELECT id FROM tags WHERE name = %s
+               )
+        """, (episode_key, tag_name))
+        deleted = cur.rowcount > 0
+
     conn.commit()
     return deleted
 
+@with_conn
+def insert_episode(
+    conn,
+    key: str,
+    series_title: str,
+    code: str,
+    expected_title: str,
+    actual_title: str,
+    confidence: float
+):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO episodes
+              (key, series_title, code, expected_title, actual_title, confidence)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (key) DO UPDATE
+              SET actual_title   = EXCLUDED.actual_title,
+                  confidence     = EXCLUDED.confidence
+            """,
+            (key, series_title, code, expected_title, actual_title, confidence)
+        )
+    conn.commit()
 # -----------------------------------------------------------------------------
 # Sonarr API Client
 # -----------------------------------------------------------------------------
@@ -215,13 +254,162 @@ class SonarrClient:
 # Utility
 # -----------------------------------------------------------------------------
 
+# 1) A pattern matching all English number-words we care about
+_NUMWORD = (
+    r"zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|"
+    r"eighteen|nineteen|"
+    r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
+    r"hundred|thousand|million"
+)
+# 2) Build a regex that grabs one or more of those, allowing hyphens or spaces
+NUM_RE = re.compile(
+    rf"(?i)\b(?:{_NUMWORD})(?:[ \-](?:{_NUMWORD}))*\b"
+)
+# Special words to tell extract_scene_title that we have reached the end of the title (if any)
+_raw_markers = os.getenv("END_MARKERS", 
+    "1080p,720p,2160p,480p,"
+    "remux,hdtv,"
+    "dts,ddp51,ac3,vc1,x264,h264,hevc,"
+    "nf,dsnp,btn,kenobi,asmofuscated"
+)
+
+# Split on commas, strip whitespace, and lowercase each token
+END_MARKERS = {
+    token.strip().lower()
+    for token in _raw_markers.split(",")
+    if token.strip()
+}
+
+def collapse_numbers(text: str) -> str:
+    """
+    Replace each contiguous run of pure number-words with its digit equivalent,
+    leaving all other words (like "Candles") intact.
+    """
+    def _repl(match):
+        phrase = match.group(0)
+        try:
+            return str(w2n.word_to_num(phrase))
+        except ValueError:
+            return phrase  # fallback, shouldn’t happen
+
+    return NUM_RE.sub(_repl, text)
+
 def normalize_title(text: str) -> str:
     if not text:
         return ""
     text = text.replace("&", "and")
+    # collapse spelled-out numbers
+    text = collapse_numbers(text)
+    # collapse Pt/Part → digits
+    text = re.sub(r'(?i)\b(?:pt|part)[\.#]?\s*(\d+)\b', r'\1', text)
+    # strip non-alphanumerics
     text = unicodedata.normalize("NFKD", text)
     return "".join(c for c in text if c.isalnum()).lower()
 
+def has_episode_numbers(title: str) -> bool:
+    return bool(re.search(r'[sS]\d{1,2}[eE]\d{1,2}', title) or re.search(r'\d{1,2}x\d{1,2}', title))
+ 
+def has_season_episode(scene_name: str) -> bool:
+    return bool(re.search(r"(?i)[sS]\d{2}[eE]\d{2}", scene_name))
+ 
+def is_missing_title(scene_name: str, expected_title: str) -> bool:
+    """
+    Return True if there was no real title between SxxEyy and the metadata,
+    or if the only token is a numeric year/number that doesn’t match the expected.
+    """
+    raw = extract_scene_title(scene_name).strip()
+    expected_norm = normalize_title(expected_title)
+
+    logging.debug(f"is_missing_title: raw extracted = {raw!r}, expected_norm = {expected_norm!r}")
+
+    # 1) Nothing at all
+    if not raw:
+        return True
+
+    # 2) Pure digits in the raw:
+    if raw.isdigit():
+        # 2a) expected is also digits and they match → not missing
+        if expected_norm.isdigit() and raw == expected_norm:
+            return False
+        # 2b) otherwise → missing
+        return True
+    
+    # 3) “PartX” (any casing) should also count as “missing”
+    if re.match(r'(?i)^part\d+$', raw):
+        return True
+
+    # 4) Otherwise, assume there's a real title word
+    return False
+
+def compute_confidence(expected_title: str, scene_name: str) -> float:
+    # 1) Normalize expected
+    norm_expected = normalize_title(expected_title)
+
+    # 2) Extract just the title portion from the scene file name
+    raw_scene_title = extract_scene_title(scene_name)
+    norm_extracted_scene = normalize_title(raw_scene_title)
+    norm_scene = normalize_title(scene_name)
+
+    logging.debug(f"Raw scene: {raw_scene_title!r}")
+    logging.debug(f"Normalized expected: {norm_expected!r}")
+    logging.debug(f"Normalized extracted scene  : {norm_extracted_scene!r}")
+    logging.debug(f"Normalized scene  : {norm_scene!r}")
+    logging.debug(f"Substring match?  : {norm_expected in norm_scene}")
+    
+    # ───── Substring override ─────
+    # If the normalized expected title literally appears in the normalized scene title, 
+    # it’s a perfect match.
+    if norm_expected in norm_scene:
+        return 1.0
+
+    # 3) No SxxEyy → no confidence
+    if not has_season_episode(scene_name):
+        logging.debug(f"No SXXEXX format")
+        return 0.0
+
+    # 4) Season match but no title words → base for missing title
+    if is_missing_title(scene_name, expected_title):
+        logging.debug(f"Missing title")
+        return 0.8
+
+    # 5) Season match + title present → exponentially penalize mismatch
+    #    e.g. base_conf=0.8, exponent=3
+    title_score = token_sort_ratio(norm_expected, norm_extracted_scene) / 100.0
+    base_conf   = 0.8
+    exp         = 1
+    conf = base_conf * (title_score ** exp)
+    logging.debug(f"Score  : {conf}")
+    return round(conf, 2)
+
+def extract_scene_title(scene_name: str) -> str:
+    tokens = re.split(r"[.\-_\s]+", scene_name)
+    for i, tok in enumerate(tokens):
+        if re.match(r"(?i)^S\d{2}E\d{2}$", tok):
+            title_parts = []
+            # look at tokens immediately after SxxEyy
+            for j, w in enumerate(tokens[i+1:], start=i+1):
+                lw = w.lower()
+
+                # 1) If we hit resolution or a known marker, stop collecting
+                if re.match(r"^\d{3,4}p$", lw) or lw in END_MARKERS:
+                    break
+
+                # 2) If this is the first token after SxxEyy, uppercase, AND
+                #    the very next token is a resolution or marker, treat as noise
+                if j == i+1 and w.isupper():
+                    nxt = tokens[j+1] if j+1 < len(tokens) else ""
+                    if re.match(r"^\d{3,4}p$", nxt.lower()) or nxt.lower() in END_MARKERS:
+                        break
+
+                # Otherwise, include it in the title
+                title_parts.append(w)
+
+            return " ".join(title_parts)
+
+    # fallback: no season/episode found
+    return re.sub(r"[.\-_\s]+", " ", scene_name)
+ 
 # -----------------------------------------------------------------------------
 # Core Logic
 # -----------------------------------------------------------------------------
@@ -250,40 +438,41 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     code = f"S{parsed_season:02d}E{parsed_epnum:02d}"
     nice = series["title"]
 
-    expected_norm = normalize_title(ep["title"])
+    expected_title = ep["title"]
+    expected_norm = normalize_title(expected_title)
     actual_norm   = normalize_title(scene)
 
     logging.info(f"\n📺 {nice} {code}")
     logging.info(f"🎯 Expected: {ep['title']}")
     logging.info(f"🎞️ Scene:    {scene}")
-
-    # On match: remove any existing tag
-    if expected_norm in actual_norm:
-        if remove_tag(key, SPECIAL_TAG_NAME, code, nice):
-            logging.info(f"✅ Match for {nice} {code}; tag removed")
-        else: 
-            logging.info(f"✅ Match for {nice} {code}; no tag to remove")
-        return
-
-    # On mismatch: fetch external count using the parsed key
-    count = get_mismatch_count(key)
-    if count >= MISMATCH_THRESHOLD:
-        if add_tag(key, SPECIAL_TAG_NAME, code, nice):
-            logging.info(f"⏩ Count ≥ {MISMATCH_THRESHOLD}, tagging & grabbing best NZB")
-            grab_best_nzb(client, series["id"], ep["id"])
-        else:
-            logging.info(f"⏩ Already tagged {nice} {code}; skipping grab")
-        return
-
-    if not FORCE_RUN:
-        logging.info("Skipping actions (not force-run).")
-        return
+    logging.debug(f"Normalized expected (main): {expected_norm!r}")
+    logging.debug(f"Normalized scene (main)  : {actual_norm!r}")
+    logging.debug(f"Substring match? (main)  : {expected_norm in actual_norm}")
     
-    logging.error(f"❌ Mismatch for {code} (external count={count})")
-    logging.info("⚡ Force-run: deleting file and re-searching")
-    delete_episode_file(client, epfile["id"])
-    refresh_series(client, series["id"])
-    search_episode(client, ep["id"])
+    confidence = compute_confidence(expected_title, scene)
+    
+    insert_episode(
+        key, nice, code, expected_title, scene, confidence
+    )
+
+    # On match: check for and add matched tag
+    if confidence >= 0.5:
+        if add_tag(key, "matched"):
+            remove_tag(key, "problematic-episode")
+            logging.info(f"✅ Tagged {nice} {code} as matched")
+        else:
+            logging.info(f"✅ ‘matched’ tag already present for {nice} {code}")
+        return
+
+    # On mismatch
+    if confidence < 0.5:
+        if add_tag(key, "problematic-episode"):
+            remove_tag(key, "matched")
+            logging.info(f"⏩ Tagging mismatched")
+        else:
+            logging.info(f"⏩ Already tagged {nice} {code}; skipping")
+        return
+
 
 def scan_library(client: SonarrClient):
     for series in client.get("series") or []:
@@ -298,96 +487,6 @@ def scan_library(client: SonarrClient):
             except Exception:
                 logging.exception(f"Fatal error checking {series['title']} ep {ep.get('id')}")
 
-# -----------------------------------------------------------------------------
-# Sonarr Actions
-# -----------------------------------------------------------------------------
-
-def delete_episode_file(client: SonarrClient, file_id: int):
-    """
-    Delete the given episode file, with extended timeout and post-delete verification.
-    """
-    url = f"{client.base_url}/api/v3/episodefile/{file_id}"
-    # we’ll use a tuple (connect_timeout, read_timeout)
-    timeout = (client.timeout, client.timeout * 3)
-
-    try:
-        resp = client.session.delete(url, timeout=timeout)
-        resp.raise_for_status()
-        logging.info(f"🗑️ Deleted episode file ID {file_id}")
-    except ReadTimeout:
-        logging.warning(f"⌛ Timeout deleting file ID {file_id}; verifying deletion…")
-        try:
-            check = client.session.get(url, timeout=(client.timeout, client.timeout))
-            if check.status_code == 404:
-                logging.info(f"✅ Deletion of file ID {file_id} confirmed after timeout")
-            else:
-                logging.error(f"❌ File ID {file_id} still present (status {check.status_code})")
-        except RequestException as e:
-            logging.error(f"❌ Error verifying deletion of {file_id}: {e}")
-    except RequestException as e:
-        logging.exception(f"❌ Failed to delete file ID {file_id}: {e}")
-
-def refresh_series(client: SonarrClient, series_id: int):
-    for cmd in ("RefreshSeries", "RescanSeries"):
-        client.post("command", {"name": cmd, "seriesId": series_id})
-    logging.info(f"🔄 Refreshed series ID {series_id}")
-
-def search_episode(client: SonarrClient, episode_id: int):
-    client.post("command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
-    logging.info(f"🔍 Searched for episode ID {episode_id}")
-
-def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: int = 5):
-    # 1) fire off EpisodeSearch
-    cmd = client.post("command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
-    if not cmd or "id" not in cmd:
-        logging.error("Failed to start EpisodeSearch")
-        return
-
-    cmd_id = cmd["id"]
-    logging.info(f"🔍 EpisodeSearch started (id={cmd_id}) for ep {episode_id}")
-
-    # 2) wait for Sonarr to finish collecting results
-    time.sleep(wait)
-
-    # 3) fetch releases
-    releases = client.get(f"release?episodeId={episode_id}") or []
-    logging.debug(f"raw releases payload: {releases!r}")
-
-    # 4) pick only those for our series
-    candidates = [r for r in releases if r.get("mappedSeriesId") == series_id]
-    logging.info(f"Found {len(candidates)} candidate releases")
-    if not candidates:
-        logging.warning("No releases found to pick from")
-        return
-
-    # 5) choose best by score
-    best = max(candidates, key=lambda r: r.get("customFormatScore", 0))
-    dl_url = best.get("downloadUrl")
-    if not dl_url:
-        logging.error("Best release has no downloadUrl")
-        return
-
-    # 6) Delete any existing episode file 
-    ep = client.get(f"episode/{episode_id}") or {}
-    file_id = ep.get("episodeFileId")
-    if file_id:
-        try:
-            delete_episode_file(client, file_id)
-        except Exception:
-            logging.exception(f"Failed to delete existing file {file_id}; continuing anyway")
-
-    # 7) push the new NZB
-    payload = {
-        "title":       best.get("title"),
-        "downloadUrl": dl_url,
-        "protocol":    best.get("protocol"),
-        "publishDate": best.get("publishDate"),
-    }
-    pushed = client.post("release/push", payload)
-    if pushed is not None:
-        logging.info(f"⬇️ Queued '{best.get('title')}' via release/push")
-    else:
-        logging.error("Failed to push release into Sonarr")
 
 # -----------------------------------------------------------------------------
 # Entrypoint
