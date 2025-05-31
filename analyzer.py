@@ -400,7 +400,7 @@ def extract_scene_title(scene_name: str) -> str:
     # This handles things like "Season.11.Ep.13" or "season11ep13".
     # The pattern is case‐insensitive:
     scene_name = re.sub(
-        r"(?i)\bSeason[.\s-_]*\d+[.\s-_]*Ep[.\s-_]*(\d+)\b",
+        r"(?i)\bSeason[.\s_-]*\d+[.\s_-]*Ep[.\s_-]*(\d+)\b",
         r"Episode \1",
         scene_name
     )
