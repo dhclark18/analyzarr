@@ -11,10 +11,11 @@
       <thead>
         <tr>
           <th>Status</th>
-          <th>S&E</th>
+          <th>Code</th>
           <th>Expected Title</th>
           <th>Actual Title</th>
           <th>Confidence</th>
+          <th>Actions</th>  {# ← new header #}
         </tr>
       </thead>
       <tbody>
@@ -34,6 +35,21 @@
             <td>{{ ep.expected_title }}</td>
             <td>{{ ep.actual_title }}</td>
             <td>{{ ep.confidence }}</td>
+
+            <!-- ───── New “Auto-Fix” button (only for problematic) ─────────────── -->
+            <td>
+              {% if 'problematic-episode' in tag_list %}
+                <form
+                  action="{{ url_for('auto_fix', series_id=series_id, code=ep.code) }}"
+                  method="post"
+                  class="d-inline"
+                >
+                  <button type="submit" class="btn btn-sm btn-warning">
+                    <i class="bi bi-tools"></i> Auto-Fix
+                  </button>
+                </form>
+              {% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>
