@@ -4,6 +4,7 @@ from psycopg2.extras import RealDictCursor
 import requests
 from flask import Flask, render_template, abort, flash, redirect, url_for, request
 from analyzer import grab_best_nzb, delete_episode_file, compute_confidence
+import re
 
 # ─── Import your standalone cleanup logic and SonarrClient ────────────────────
 #    (Assumes you have a cleanup.py next to this file that defines cleanup_deleted,
