@@ -147,12 +147,17 @@ def cleanup_route():
 @app.route("/series/<int:series_id>/episode/<code>/auto-fix", methods=["POST"])
 def auto_fix(series_id: int, code: str):
     """
-    1) Parse season & episode from code (e.g. "(?i)S(\d{2})E(\d{2})").
-    2) Look up Sonarr internal episode_id via GET /episode?seriesId=&seasonNumber=&episodeNumber=.
-    3) Call grab_best_nzb(sonarr_client, series_id, episode_id).
-    4) Flash a message and redirect back to view_series.
+    1) Parse season & episode from code (e.g. “S12E13”).
+    2) Call SonarrClient.get("episode?seriesId=…&seasonNumber=…&episodeNumber=…")
+       to retrieve the internal episodeId.
+    3) Invoke grab_best_nzb(sonarr_client, series_id, episode_id).
+    4) Flash a result and redirect back to view_series.
     """
-    # 1) Parse SxxEyy
+    import re
+    import logging
+    from flask import flash, redirect, url_for
+
+    # 1) Parse SxxEyy from `code`
     m = re.match(r"(?i)^S(\d{2})E(\d{2})$", code)
     if not m:
         flash("❌ Invalid episode code.", "danger")
@@ -161,20 +166,29 @@ def auto_fix(series_id: int, code: str):
     season = int(m.group(1))
     epnum  = int(m.group(2))
 
-    # 2) Find Sonarr’s internal episode_id
+    # 2) Look up Sonarr’s internal episodeId by embedding query parameters
     try:
-        params = {"seriesId": series_id, "seasonNumber": season, "episodeNumber": epnum}
-        r = sonarr_client.get("episode", params=params)
+        endpoint = (
+            f"episode?seriesId={series_id}"
+            f"&seasonNumber={season}"
+            f"&episodeNumber={epnum}"
+        )
+        r = sonarr_client.get(endpoint) or []
         if not isinstance(r, list) or not r:
             flash(f"❌ Episode {code} not found in Sonarr.", "danger")
             return redirect(url_for("view_series", series_id=series_id))
+
         episode_id = r[0].get("id")
-    except Exception as e:
+        if episode_id is None:
+            flash(f"❌ Could not extract episode ID for {code}.", "danger")
+            return redirect(url_for("view_series", series_id=series_id))
+
+    except Exception as ex:
         logging.exception("Error looking up episodeId in Sonarr")
         flash("❌ Could not retrieve episode ID from Sonarr.", "danger")
         return redirect(url_for("view_series", series_id=series_id))
 
-    # 3) Call your existing grab_best_nzb
+    # 3) Call your existing grab_best_nzb helper
     try:
         grab_best_nzb(sonarr_client, series_id, episode_id, wait=5)
         flash(f"🔧 Auto-Fix triggered for {code}.", "success")
