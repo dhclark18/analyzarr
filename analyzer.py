@@ -122,18 +122,6 @@ def init_db(conn):
     cur.close()
 
 # -----------------------------------------------------------------------------
-# Mismatch Count Reader
-# -----------------------------------------------------------------------------
-
-@with_conn
-def get_mismatch_count(conn, key: str) -> int:
-    """Read the pre-incremented mismatch count for this key."""
-    with conn.cursor() as cur:
-        cur.execute("SELECT count FROM mismatch_tracking WHERE key = %s", (key,))
-        row = cur.fetchone()
-    return row[0] if row else 0
-
-# -----------------------------------------------------------------------------
 # Tag Helpers
 # -----------------------------------------------------------------------------
 
