@@ -12,6 +12,7 @@ services:
       TVDB_ID: [id]                        # optional TVDB ID for show you want to analyze
       SEASON_FILTER: [season]                     # optional seaons in a show you want to analyze, or for multiple: SEASON_FILTER: 2,5,7  
       DATABASE_URL: [postgress db url]
+      END_MARKERS: #highly recommend adding various quality formats and other common things found in nzb files after the title
     volumes:
       - /path/to/tv/folder:/watched:ro
       - /path/to/logs:/logs                 #optional
