@@ -3,14 +3,13 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
 from flask import Flask, render_template, abort, flash, redirect, url_for, request
-from analyzer import grab_best_nzb, delete_episode_file, compute_confidence
+from analyzer import SonarrClient, grab_best_nzb, delete_episode_file, compute_confidence
 import re
 import logging
 
-# ─── Import your standalone cleanup logic and SonarrClient ────────────────────
+# ─── Import your standalone cleanup logic and ────────────────────
 #    (Assumes you have a cleanup.py next to this file that defines cleanup_deleted,
-#     SonarrClient, and re-exports SONARR_URL/SONARR_API_KEY/API_TIMEOUT.)
-from cleanup import cleanup_deleted, SonarrClient, SONARR_URL, SONARR_API_KEY, API_TIMEOUT
+from cleanup import cleanup_deleted, SONARR_URL, SONARR_API_KEY, API_TIMEOUT
 
 app = Flask(__name__)
 # Secret key required for flash() to work
