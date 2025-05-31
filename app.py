@@ -83,16 +83,15 @@ def index():
     # 4) Pass series (with mismatch_count) into the template
     return render_template("index.html", series=series)
 
-
 @app.route("/series/<int:series_id>")
 def view_series(series_id):
-    # — fetch series info from Sonarr (unchanged) —
+    # — existing Sonarr lookup to get series “title” —
     all_series = fetch_series_from_sonarr()
     info = next((s for s in all_series if s["id"] == series_id), None)
     if not info:
         abort(404, description="Series not found in Sonarr")
 
-    # — pull episodes + tags from Postgres (same SQL) —
+    # 1) Pull episodes + tags from your Postgres (as before)
     conn = get_db()
     cur  = conn.cursor()
     cur.execute("""
@@ -113,11 +112,48 @@ def view_series(series_id):
     cur.close()
     conn.close()
 
-    # — group by season number extracted from code "SxxEyy" —
-    seasons = {}
+    # 2) For each row, do a quick Sonarr call to get the episode’s internal ID
+    #    We’ll build a new list of dicts, adding “sonarr_id”
+    enriched_rows = []
     for ep in rows:
+        # ep["code"] is like "S14E11"
+        import re
+        m = re.match(r"(?i)^S(\d{2})E(\d{2})$", ep["code"])
+        if not m:
+            # fallback: skip Sonarr lookup if code malformed
+            sonarr_id = None
+        else:
+            season = int(m.group(1))
+            epnum  = int(m.group(2))
+            # call Sonarr: GET /episode?seriesId=…&seasonNumber=…&episodeNumber=…
+            endpoint = f"episode?seriesId={series_id}&seasonNumber={season}&episodeNumber={epnum}"
+            try:
+                result = sonarr_client.get(endpoint) or []
+                sonarr_id = result[0].get("id") if (isinstance(result, list) and result) else None
+            except Exception:
+                sonarr_id = None
+
+        enriched_rows.append({
+            "code":            ep["code"],
+            "expected_title":  ep["expected_title"],
+            "actual_title":    ep["actual_title"],
+            "confidence":      ep["confidence"],
+            "tags":            ep["tags"],
+            "sonarr_id":       sonarr_id
+        })
+
+    # 3) Group by season for the template
+    seasons = {}
+    for ep in enriched_rows:
         season_num = int(ep["code"][1:3])
         seasons.setdefault(season_num, []).append(ep)
+
+    return render_template(
+        "episodes.html",
+        series_id=series_id,
+        series_title=info["title"],
+        seasons=seasons
+    )
 
     # ─── Pass series_id into the template ───────────────────────────────────
     return render_template(
