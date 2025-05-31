@@ -1,6 +1,6 @@
 # Analyzarr
 
-This Docker-based tool verifies that downloaded episode filenames match official titles (via TVDb). The webpage provides a detailed breakdown of each episode so you can see exactly which episodes are potentially problematic. This was created this becuase every so often a string of episodes (typically after a multi-part episode) would be offset due to the various episode numberings some shows have. This will catch those situations in addition to random incorrectly labeled nzb files.  
+This Docker-based tool verifies that downloaded episode filenames match official titles (via TVDb). The webpage provides a detailed breakdown of each episode so you can see exactly which episodes are potentially problematic. This was created becuase every so often a string of episodes (typically after a multi-part episode) would be offset due to the various episode numberings some shows have. This will catch those situations in addition to random incorrectly labeled nzb files.  
 
 ## Features
 
