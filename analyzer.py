@@ -389,32 +389,47 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
     return round(conf, 2)
 
 def extract_scene_title(scene_name: str) -> str:
+    """
+    Splits on dots/hyphens/underscores/whitespace, finds the SxxEyy token,
+    then returns the tokens after it up until a known marker.
+
+    *New:* First, collapse any "Season <num> Ep <num>" (in any case/spacing)
+      into the single phrase "Episode <num>" so it normalizes correctly.
+    """
+    # ── Step 0: collapse "Season X Ep Y" into "Episode Y" ───────────────────
+    # This handles things like "Season.11.Ep.13" or "season11ep13".
+    # The pattern is case‐insensitive:
+    scene_name = re.sub(
+        r"(?i)\bSeason[.\s-_]*\d+[.\s-_]*Ep[.\s-_]*(\d+)\b",
+        r"Episode \1",
+        scene_name
+    )
+
+    # ── Step 1: split on ., -, _, or whitespace ─────────────────────────────
     tokens = re.split(r"[.\-_\s]+", scene_name)
+
+    # ── Step 2: find the SxxEyy token ──────────────────────────────────────
     for i, tok in enumerate(tokens):
         if re.match(r"(?i)^S\d{2}E\d{2}$", tok):
+            # ── Step 3: collect everything after SxxEyy until a known marker ─
             title_parts = []
-            # look at tokens immediately after SxxEyy
-            for j, w in enumerate(tokens[i+1:], start=i+1):
-                lw = w.lower()
-
-                # 1) If we hit resolution or a known marker, stop collecting
-                if re.match(r"^\d{3,4}p$", lw) or lw in END_MARKERS:
+            for w in tokens[i+1:]:
+                low = w.lower()
+                # stop on resolution or any end‐marker (e.g. "720p", "bluray", etc.)
+                if low in END_MARKERS or re.match(r"^\d{3,4}p$", low):
                     break
 
-                # 2) If this is the first token after SxxEyy, uppercase, AND
-                #    the very next token is a resolution or marker, treat as noise
-                if j == i+1 and w.isupper():
-                    nxt = tokens[j+1] if j+1 < len(tokens) else ""
-                    if re.match(r"^\d{3,4}p$", nxt.lower()) or nxt.lower() in END_MARKERS:
-                        break
+                # accept TitleCase (first letter uppercase, rest lowercase)
+                if not (len(w) > 1 and w[0].isupper() and w[1:].islower()):
+                    continue
 
-                # Otherwise, include it in the title
                 title_parts.append(w)
 
+            # ── Step 4: re‐join with spaces and return ────────────────────────
             return " ".join(title_parts)
 
-    # fallback: no season/episode found
-    return re.sub(r"[.\-_\s]+", " ", scene_name)
+    # Fallback: if no SxxEyy found, just replace separators with spaces
+    return re.sub(r"[.\-_]+", " ", scene_name)
  
 # -----------------------------------------------------------------------------
 # Core Logic
