@@ -7,12 +7,14 @@ services:
     environment:
       SONARR_URL: http://[sonarr_ip]:8989
       SONARR_API_KEY: [sonarr api key]
-      CHECK_COOLDOWN: 5                     # in seconds
-      FR_RUN: true                          # force run to delete any mismatched episodes that don't cross threshold, set to false to just see what episodes are flagged as mismatching
+      CHECK_COOLDOWN: 5                    # in seconds
+      FR_RUN: true                         # force run to delete any mismatched episodes that don't cross threshold, set to false to just see what episodes are flagged as mismatching
       TVDB_ID: [id]                        # optional TVDB ID for show you want to analyze
-      SEASON_FILTER: [season]                     # optional seaons in a show you want to analyze, or for multiple: SEASON_FILTER: 2,5,7  
+      SEASON_FILTER: [season]              # optional seaons in a show you want to analyze, or for multiple: SEASON_FILTER: 2,5,7  
       DATABASE_URL: [postgress db url]
-      END_MARKERS: #highly recommend adding various quality formats and other common things found in nzb files after the title
+      END_MARKERS:                         # highly recommend adding various quality formats and other common things found in nzb files after the title
+      LOG_LEVEL: INFO                      # DEBUG also available
+      FLASK_SECRET_KEY:                    # super secure password
     volumes:
       - /path/to/tv/folder:/watched:ro
       - /path/to/logs:/logs                 #optional
