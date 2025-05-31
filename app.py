@@ -3,6 +3,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
 from flask import Flask, render_template, abort, flash, redirect, url_for, request
+from analyzer import grab_best_nzb, delete_episode_file, compute_confidence
 
 # ─── Import your standalone cleanup logic and SonarrClient ────────────────────
 #    (Assumes you have a cleanup.py next to this file that defines cleanup_deleted,
@@ -140,6 +141,46 @@ def cleanup_route():
     ref = request.referrer or url_for("index")
     return redirect(ref)
 
+@app.route("/series/<int:series_id>/episode/<code>/auto-fix", methods=["POST"])
+def auto_fix(series_id: int, code: str):
+    """
+    1) Parse season & episode from code (e.g. "(?i)S(\d{2})E(\d{2})").
+    2) Look up Sonarr internal episode_id via GET /episode?seriesId=&seasonNumber=&episodeNumber=.
+    3) Call grab_best_nzb(sonarr_client, series_id, episode_id).
+    4) Flash a message and redirect back to view_series.
+    """
+    # 1) Parse SxxEyy
+    m = re.match(r"(?i)^S(\d{2})E(\d{2})$", code)
+    if not m:
+        flash("❌ Invalid episode code.", "danger")
+        return redirect(url_for("view_series", series_id=series_id))
 
+    season = int(m.group(1))
+    epnum  = int(m.group(2))
+
+    # 2) Find Sonarr’s internal episode_id
+    try:
+        params = {"seriesId": series_id, "seasonNumber": season, "episodeNumber": epnum}
+        r = sonarr_client.get("episode", params=params)
+        if not isinstance(r, list) or not r:
+            flash(f"❌ Episode {code} not found in Sonarr.", "danger")
+            return redirect(url_for("view_series", series_id=series_id))
+        episode_id = r[0].get("id")
+    except Exception as e:
+        logging.exception("Error looking up episodeId in Sonarr")
+        flash("❌ Could not retrieve episode ID from Sonarr.", "danger")
+        return redirect(url_for("view_series", series_id=series_id))
+
+    # 3) Call your existing grab_best_nzb
+    try:
+        grab_best_nzb(sonarr_client, series_id, episode_id, wait=5)
+        flash(f"🔧 Auto-Fix triggered for {code}.", "success")
+    except Exception as ex:
+        logging.exception("Auto-Fix failed")
+        flash(f"❌ Auto-Fix failed: {ex}", "danger")
+
+    # 4) Redirect back to the series page
+    return redirect(url_for("view_series", series_id=series_id))
+    
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
