@@ -1,6 +1,6 @@
 version: "3.8"
 services:
-  sonarr-scanner:
+  analyzarr:
     image: dhclark18/analyzarr:latest
     ports:
       - "5000:5000"
