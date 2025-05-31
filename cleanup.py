@@ -134,10 +134,11 @@ def normalize_title(text: str) -> str:
 @with_conn
 def cleanup_deleted(conn, sonarr_client: SonarrClient):
     """
-    1) Fetch all series once.
-    2) For each series, fetch episodes via GET /episode?seriesId=<id>.
-    3) Build a Python set of all “live” keys.
-    4) DELETE FROM episodes WHERE key NOT IN (<all_live_keys>).
+    1) Fetch all series once (GET /series).
+    2) For each series, fetch its episodes (GET /episode?seriesId=<id>).
+       Only keep episodes where hasFile == True (and episodeFileId exists).
+    3) Build a Python set of all “live” keys (series::<norm_title>::SxxExx).
+    4) DELETE FROM episodes WHERE key NOT IN (<live_keys>).
     """
     cur = conn.cursor()
 
@@ -157,16 +158,18 @@ def cleanup_deleted(conn, sonarr_client: SonarrClient):
         norm = normalize_title(title)
         series_map[sid] = norm
 
-    # 2) For each series, fetch its episodes and accumulate keys
+    # 2) For each series, fetch episodes and accumulate only those with hasFile=True
     live_keys = set()
     for sid, norm_title in series_map.items():
-        params = {"seriesId": sid}
-        eps = sonarr_client.get("episode", params=params)
+        eps = sonarr_client.get("episode", params={"seriesId": sid})
         if eps is None:
             logging.warning(f"❌ Skipping seriesId={sid} (could not fetch episodes).")
             continue
 
         for ep in eps:
+            # If the episode has no file attached, skip it (treat as deleted)
+            if not ep.get("hasFile") or not ep.get("episodeFileId"):
+                continue
             season = ep.get("seasonNumber")
             epnum  = ep.get("episodeNumber")
             if season is None or epnum is None:
@@ -174,33 +177,32 @@ def cleanup_deleted(conn, sonarr_client: SonarrClient):
             key = f"series::{norm_title}::S{season:02d}E{epnum:02d}"
             live_keys.add(key)
 
-    # 3) If no live keys found, delete everything
+    # 3) Debug: show which DB keys are orphaned (optional)
+    cur.execute("SELECT key FROM episodes;")
+    db_keys = {row[0] for row in cur.fetchall()}
+    to_delete = db_keys - live_keys
+    if to_delete:
+        logging.info("Keys in DB but no corresponding file in Sonarr (will be deleted):")
+        for k in sorted(to_delete):
+            logging.info("   ✂️  %s", k)
+    else:
+        logging.info("No orphaned keys found; DB is up to date.")
+
+    # 4) Bulk delete any episodes not in live_keys
     if not live_keys:
-        logging.info("🗑️ No episodes returned from Sonarr; purging all episodes.")
+        logging.info("🗑️ No keepable episodes found: purging entire episodes table.")
         cur.execute("DELETE FROM episodes;")
         conn.commit()
         cur.close()
         return
-    
-    cur.execute("SELECT key FROM episodes;")
-    db_keys = {row[0] for row in cur.fetchall()}
 
-    missing_from_sonarr = db_keys - live_keys
-    if missing_from_sonarr:
-        logging.info("Keys in DB but NOT in Sonarr (to be deleted):")
-        for k in sorted(missing_from_sonarr):
-            logging.info("   ✂️  %s", k)
-    else:
-        logging.info("No orphaned keys found; DB is in sync.")
-        
-    # 4) Bulk delete any episodes not in live_keys
     placeholders = ",".join(["%s"] * len(live_keys))
     delete_sql = sql.SQL("""
         DELETE FROM episodes
          WHERE key NOT IN ({keys});
     """).format(keys=sql.SQL(placeholders))
 
-    logging.info(f"🗑️ Deleting any episodes not in Sonarr (live count = {len(live_keys)})...")
+    logging.info(f"🗑️ Deleting any DB rows not in Sonarr’s live file set (count={len(live_keys)})...")
     cur.execute(delete_sql, tuple(live_keys))
     conn.commit()
     cur.close()
