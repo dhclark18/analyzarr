@@ -189,9 +189,9 @@ def auto_fix(series_id: int):
     3) Flash a message and immediately redirect back to view_series.
     """
     # 1) Pull episode_id from the form
-    logging.info(f"📌 auto_fix called with episode_id={request.form.get('episode_id')}")
     try:
         episode_id = int(request.form.get("episode_id",""))
+        logging.info(f"📌 auto_fix called with episode_id={request.form.get('episode_id')}")
     except (TypeError, ValueError):
         flash("❌ Invalid Episode ID", "danger")
         return redirect(url_for("view_series", series_id=series_id))
