@@ -79,13 +79,13 @@ def index():
 
 @app.route("/series/<int:series_id>")
 def view_series(series_id):
-    # — existing Sonarr lookup to get series “title” —
+    # 1) Find the series title (as before)
     all_series = fetch_series_from_sonarr()
     info = next((s for s in all_series if s["id"] == series_id), None)
     if not info:
         abort(404, description="Series not found in Sonarr")
 
-    # 1) Pull episodes + tags from Postgres
+    # 2) Pull episodes + tags from Postgres (same as before)
     conn = get_db()
     cur  = conn.cursor()
     cur.execute("""
@@ -102,13 +102,25 @@ def view_series(series_id):
         GROUP BY e.key
         ORDER BY e.code
     """, (info["title"],))
-    rows = cur.fetchall()
+    db_rows = cur.fetchall()
     cur.close()
     conn.close()
 
-    # 2) For each row, do a quick Sonarr call to get the episode’s internal ID
+    # 3) Fetch *all* Sonarr episodes for this series in one shot:
+    #    GET /api/v3/episode?seriesId=<series_id>
+    try:
+        sonarr_eps = sonarr_client.get(f"episode?seriesId={series_id}") or []
+    except Exception:
+        sonarr_eps = []
+    #    Build a lookup: (season, episode) → episodeId
+    by_season_ep = {
+        (ep["seasonNumber"], ep["episodeNumber"]): ep["id"]
+        for ep in sonarr_eps
+    }
+
+    # 4) Enrich each DB row with the correct Sonarr ID
     enriched_rows = []
-    for ep in rows:
+    for ep in db_rows:
         code = ep["code"]  # e.g. "S14E11"
         m = re.match(r"(?i)^S(\d{2})E(\d{2})$", code)
         if not m:
@@ -116,30 +128,18 @@ def view_series(series_id):
         else:
             season = int(m.group(1))
             epnum  = int(m.group(2))
-            endpoint = f"episode?seriesId={series_id}&seasonNumber={season}&episodeNumber={epnum}"
-            logging.debug(f"🔍 Sonarr lookup URL for {code}: GET /api/v3/{endpoint}")
-            try:
-                result = sonarr_client.get(endpoint) or []
-                if isinstance(result, list) and result:
-                    sonarr_id = result[0].get("id")
-                    logging.debug(f"   → Returned sonarr_id={sonarr_id} for code={code}")
-                else:
-                    sonarr_id = None
-                    logging.debug(f"   → Sonarr returned no results for code={code}")
-            except Exception:
-                logging.exception(f"🔴 Error fetching Sonarr ID for {code}")
-                sonarr_id = None
+            sonarr_id = by_season_ep.get((season, epnum))
 
         enriched_rows.append({
-            "code":            ep["code"],
-            "expected_title":  ep["expected_title"],
-            "actual_title":    ep["actual_title"],
-            "confidence":      ep["confidence"],
-            "tags":            ep["tags"],
-            "sonarr_id":       sonarr_id
+            "code":           code,
+            "expected_title": ep["expected_title"],
+            "actual_title":   ep["actual_title"],
+            "confidence":     ep["confidence"],
+            "tags":           ep["tags"],
+            "sonarr_id":      sonarr_id
         })
 
-    # 3) Group by season for the template
+    # 5) Group by season for rendering
     seasons = {}
     for ep in enriched_rows:
         season_num = int(ep["code"][1:3])
