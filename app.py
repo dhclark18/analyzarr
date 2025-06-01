@@ -171,46 +171,47 @@ def cleanup_route():
 @app.route("/series/<int:series_id>/episode/auto-fix", methods=["POST"])
 def auto_fix(series_id: int):
     """
-    1) Read the hidden 'episode_id' field from request.form.
-    2) Verify it belongs to this series.
-    3) Spawn a background thread to run grab_best_nzb(…).
-    4) Flash a message and immediately redirect back to view_series.
+    1) Read 'episode_id' from JSON payload.
+    2) Verify it belongs to the series.
+    3) Call grab_best_nzb(...) synchronously.
+    4) Return JSON when done.
     """
-    # 1) Pull episode_id from the form and log it
-    episode_id_str = request.form.get("episode_id", "")
-    logging.info(f"▶ auto_fix form payload: episode_id='{episode_id_str}'")
-    try:
-        episode_id = int(episode_id_str)
-        logging.info(f"📌 auto_fix parsed episode_id → {episode_id}")
-    except (TypeError, ValueError):
-        flash("❌ Invalid Episode ID", "danger")
-        return redirect(url_for("view_series", series_id=series_id))
+    from flask import jsonify
 
-    # 2) Verify that Sonarr actually has that episode for this series
+    # 1) Pull episode_id from JSON body (not form)
+    data = request.get_json(silent=True) or {}
+    episode_id = data.get("episode_id")
+    logging.debug(f"▶ auto_fix JSON payload: episode_id={episode_id!r}")
+
+    try:
+        episode_id = int(episode_id)
+    except (TypeError, ValueError):
+        return jsonify({"status":"error", "message":"Invalid episode_id"}), 400
+
+    # 2) Verify episode belongs to this series
     try:
         ep_info = sonarr_client.get(f"episode/{episode_id}") or {}
         if ep_info.get("seriesId") != series_id:
-            flash("❌ Episode ID does not match this series.", "danger")
-            return redirect(url_for("view_series", series_id=series_id))
+            return jsonify({
+                "status":  "error",
+                "message": "Episode ID does not match this series"
+            }), 400
     except Exception:
         logging.exception("Error validating episode ID in Sonarr")
-        flash("❌ Could not validate episode in Sonarr.", "danger")
-        return redirect(url_for("view_series", series_id=series_id))
+        return jsonify({"status":"error", "message":"Sonarr lookup failed"}), 500
 
-    # 3) Run grab_best_nzb in a background thread so we return immediately
-    def _background_job():
-        try:
-            grab_best_nzb(sonarr_client, series_id, episode_id, wait=5)
-            logging.info(f"✅ Auto-Fix thread for Sonarr episode ID {episode_id} completed")
-        except Exception:
-            logging.exception(f"⚠️ Auto-Fix thread for Sonarr episode ID {episode_id} failed")
+    # 3) Run grab_best_nzb(...) *synchronously* (blocking HTTP until it finishes)
+    try:
+        grab_best_nzb(sonarr_client, series_id, episode_id, wait=5)
+    except Exception as ex:
+        logging.exception("grab_best_nzb failed")
+        return jsonify({
+            "status":  "error",
+            "message": f"Auto-Fix failed: {ex}"
+        }), 500
 
-    t = threading.Thread(target=_background_job, daemon=True)
-    t.start()
-
-    # 4) Redirect back to the series page immediately
-    flash(f"🔧 Auto-Fix started for Sonarr episode ID {episode_id}", "info")
-    return redirect(url_for("view_series", series_id=series_id))
+    # 4) Success
+    return jsonify({"status":"success", "message":"Auto-Fix complete"}), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
