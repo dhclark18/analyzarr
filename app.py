@@ -154,11 +154,6 @@ def view_series(series_id):
 
 @app.route("/cleanup", methods=["POST"])
 def cleanup_route():
-    """
-    Instead of doing a blocking form‐submit → redirect, we now:
-      • Run cleanup_deleted(...) synchronously.
-      • Return JSON { status, message } when done.
-    """
     try:
         cleanup_deleted(sonarr_client)
     except Exception as e:
