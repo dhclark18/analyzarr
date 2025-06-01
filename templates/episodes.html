@@ -24,18 +24,17 @@
             <td class="text-center">
               {% set tag_list = ep.tags.split(',') if ep.tags else [] %}
               {% if 'matched' in tag_list %}
-                <i class="bi bi-check-circle-fill text-success" title="Matched"></i>
+                <i class="bi bi-check-circle-fill text-success"></i>
               {% elif 'problematic-episode' in tag_list %}
-                <i class="bi bi-exclamation-circle-fill text-danger" title="Problematic"></i>
+                <i class="bi bi-exclamation-circle-fill text-danger"></i>
               {% else %}
-                <i class="bi bi-question-circle-fill text-secondary" title="Untagged"></i>
+                <i class="bi bi-question-circle-fill text-secondary"></i>
               {% endif %}
             </td>
             <td>{{ ep.code }}</td>
             <td>{{ ep.expected_title }}</td>
             <td>{{ ep.actual_title }}</td>
             <td>{{ ep.confidence }}</td>
-
             <td>
               {% if 'problematic-episode' in tag_list and ep.sonarr_id %}
                 <form
@@ -43,8 +42,12 @@
                   method="post"
                   class="d-inline"
                 >
-                  <!-- send the exact Sonarr episode ID instead of code -->
-                  <input type="hidden" name="episode_id" value="{{ ep.sonarr_id }}">
+                  <!-- EXACT numeric Sonarr ID; no code parsing downstream -->
+                  <input
+                    type="hidden"
+                    name="episode_id"
+                    value="{{ ep.sonarr_id }}"
+                  >
                   <button type="submit" class="btn btn-sm btn-warning">
                     <i class="bi bi-tools"></i> Auto-Fix
                   </button>
