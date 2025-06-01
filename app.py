@@ -8,13 +8,12 @@ import re
 import logging
 import threading
 
-# ─── Import your standalone cleanup logic and ────────────────────
-#    (Assumes you have a cleanup.py next to this file that defines cleanup_deleted,
+# ─── Import your standalone cleanup logic ─────────────────────────────────────
 from cleanup import cleanup_deleted
 
 app = Flask(__name__)
 # Secret key required for flash() to work
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "change‐this‐to‐something‐secret")
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-this-to-something-secret")
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 DATABASE_URL    = os.getenv("DATABASE_URL")
@@ -26,10 +25,9 @@ if not SONARR_API_KEY:
 SONARR_HEADERS  = {"X-Api-Key": SONARR_API_KEY}
 SONARR_SESSION  = requests.Session()
 SONARR_SESSION.headers.update(SONARR_HEADERS)
-API_TIMEOUT    = int(os.getenv("API_TIMEOUT", "10"))
+API_TIMEOUT     = int(os.getenv("API_TIMEOUT", "10"))
 
-# ─── Instantiate a single SonarrClient for cleanup ───────────────────────────
-#    Reuse this for every “Purge” click.
+# ─── Instantiate a single SonarrClient for cleanup ────────────────────────────
 sonarr_client = SonarrClient(SONARR_URL, SONARR_API_KEY, timeout=API_TIMEOUT)
 
 # ─── Database helper ──────────────────────────────────────────────────────────
@@ -53,7 +51,6 @@ def fetch_series_from_sonarr():
 def index():
     # 1) Pull list of series from Sonarr
     series_list = fetch_series_from_sonarr()
-    # Build a simple list: [{ "title": "...", "id": 123 }, ...]
     series = [{"title": s["title"], "id": s["id"]} for s in series_list]
     series.sort(key=lambda x: x["title"].lower())
 
@@ -74,14 +71,10 @@ def index():
     cur.close()
     conn.close()
 
-    # Build a mapping: { series_title: mismatch_count, ... }
     counts = {r["series_title"]: r["mismatch_count"] for r in rows}
-
-    # 3) Merge mismatch counts into the series list
     for s in series:
         s["mismatch_count"] = counts.get(s["title"], 0)
 
-    # 4) Pass series (with mismatch_count) into the template
     return render_template("index.html", series=series)
 
 @app.route("/series/<int:series_id>")
@@ -92,7 +85,7 @@ def view_series(series_id):
     if not info:
         abort(404, description="Series not found in Sonarr")
 
-    # 1) Pull episodes + tags from your Postgres (as before)
+    # 1) Pull episodes + tags from Postgres
     conn = get_db()
     cur  = conn.cursor()
     cur.execute("""
@@ -114,24 +107,27 @@ def view_series(series_id):
     conn.close()
 
     # 2) For each row, do a quick Sonarr call to get the episode’s internal ID
-    #    We’ll build a new list of dicts, adding “sonarr_id”
     enriched_rows = []
     for ep in rows:
-        # ep["code"] is like "S14E11"
-        import re
-        m = re.match(r"(?i)^S(\d{2})E(\d{2})$", ep["code"])
+        code = ep["code"]  # e.g. "S14E11"
+        m = re.match(r"(?i)^S(\d{2})E(\d{2})$", code)
         if not m:
-            # fallback: skip Sonarr lookup if code malformed
             sonarr_id = None
         else:
             season = int(m.group(1))
             epnum  = int(m.group(2))
-            # call Sonarr: GET /episode?seriesId=…&seasonNumber=…&episodeNumber=…
             endpoint = f"episode?seriesId={series_id}&seasonNumber={season}&episodeNumber={epnum}"
+            logging.debug(f"🔍 Sonarr lookup URL for {code}: GET /api/v3/{endpoint}")
             try:
                 result = sonarr_client.get(endpoint) or []
-                sonarr_id = result[0].get("id") if (isinstance(result, list) and result) else None
+                if isinstance(result, list) and result:
+                    sonarr_id = result[0].get("id")
+                    logging.debug(f"   → Returned sonarr_id={sonarr_id} for code={code}")
+                else:
+                    sonarr_id = None
+                    logging.debug(f"   → Sonarr returned no results for code={code}")
             except Exception:
+                logging.exception(f"🔴 Error fetching Sonarr ID for {code}")
                 sonarr_id = None
 
         enriched_rows.append({
@@ -156,14 +152,6 @@ def view_series(series_id):
         seasons=seasons
     )
 
-    # ─── Pass series_id into the template ───────────────────────────────────
-    return render_template(
-        "episodes.html",
-        series_id=series_id,            # ← NEW
-        series_title=info["title"],
-        seasons=seasons
-    )
-
 @app.route("/cleanup", methods=["POST"])
 def cleanup_route():
     """
@@ -177,7 +165,6 @@ def cleanup_route():
         app.logger.exception("Error during cleanup")
         flash(f"Cleanup failed: {e}", "danger")
 
-    # Redirect back to the page the user came from (or to index() if unknown)
     ref = request.referrer or url_for("index")
     return redirect(ref)
 
@@ -185,20 +172,22 @@ def cleanup_route():
 def auto_fix(series_id: int):
     """
     1) Read the hidden 'episode_id' field from request.form.
-    2) Spawn a background thread to run grab_best_nzb(sonarr_client, series_id, episode_id).
-    3) Flash a message and immediately redirect back to view_series.
+    2) Verify it belongs to this series.
+    3) Spawn a background thread to run grab_best_nzb(…).
+    4) Flash a message and immediately redirect back to view_series.
     """
-    # 1) Pull episode_id from the form
+    # 1) Pull episode_id from the form and log it
+    episode_id_str = request.form.get("episode_id", "")
+    logging.info(f"▶ auto_fix form payload: episode_id='{episode_id_str}'")
     try:
-        episode_id = int(request.form.get("episode_id",""))
-        logging.info(f"📌 auto_fix called with episode_id={request.form.get('episode_id')}")
+        episode_id = int(episode_id_str)
+        logging.info(f"📌 auto_fix parsed episode_id → {episode_id}")
     except (TypeError, ValueError):
         flash("❌ Invalid Episode ID", "danger")
         return redirect(url_for("view_series", series_id=series_id))
 
-    # (Optional) Verify that Sonarr actually has that episode for this series:
+    # 2) Verify that Sonarr actually has that episode for this series
     try:
-        # GET /episode/<episode_id> to confirm it belongs to series_id
         ep_info = sonarr_client.get(f"episode/{episode_id}") or {}
         if ep_info.get("seriesId") != series_id:
             flash("❌ Episode ID does not match this series.", "danger")
@@ -208,7 +197,7 @@ def auto_fix(series_id: int):
         flash("❌ Could not validate episode in Sonarr.", "danger")
         return redirect(url_for("view_series", series_id=series_id))
 
-    # 2) Run grab_best_nzb in a background thread so we return immediately
+    # 3) Run grab_best_nzb in a background thread so we return immediately
     def _background_job():
         try:
             grab_best_nzb(sonarr_client, series_id, episode_id, wait=5)
@@ -219,9 +208,9 @@ def auto_fix(series_id: int):
     t = threading.Thread(target=_background_job, daemon=True)
     t.start()
 
-    # 3) Redirect back to the series page immediately
+    # 4) Redirect back to the series page immediately
     flash(f"🔧 Auto-Fix started for Sonarr episode ID {episode_id}", "info")
     return redirect(url_for("view_series", series_id=series_id))
-    
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
