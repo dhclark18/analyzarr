@@ -2,7 +2,7 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
-from flask import Flask, render_template, abort, flash, redirect, url_for, request
+from flask import Flask, render_template, abort, flash, redirect, url_for, request, jsonify
 from analyzer import SonarrClient, grab_best_nzb, delete_episode_file, compute_confidence
 import re
 import logging
@@ -155,19 +155,24 @@ def view_series(series_id):
 @app.route("/cleanup", methods=["POST"])
 def cleanup_route():
     """
-    Trigger a one-off cleanup: deletes any episodes (and their tags/mismatch rows)
-    that Sonarr no longer returns. Then redirect back to the referring page.
+    Instead of doing a blocking form‐submit → redirect, we now:
+      • Run cleanup_deleted(...) synchronously.
+      • Return JSON { status, message } when done.
     """
     try:
         cleanup_deleted(sonarr_client)
-        flash("🗑️ Cleanup complete: database synced with Sonarr.", "success")
     except Exception as e:
         app.logger.exception("Error during cleanup")
-        flash(f"Cleanup failed: {e}", "danger")
+        return jsonify({
+            "status": "error",
+            "message": f"Cleanup failed: {e}"
+        }), 500
 
-    ref = request.referrer or url_for("index")
-    return redirect(ref)
-
+    return jsonify({
+        "status":  "success",
+        "message": "Cleanup complete: database synced with Sonarr."
+    }), 200
+    
 @app.route("/series/<int:series_id>/episode/auto-fix", methods=["POST"])
 def auto_fix(series_id: int):
     """
