@@ -32,11 +32,13 @@
           <ul class="navbar-nav me-auto mb-2 mb-lg-0">
             <!-- (You can add other nav links here if needed) -->
           </ul>
-          <form action="{{ url_for('cleanup_route') }}" method="post" class="d-flex">
-            <button class="btn btn-outline-light" type="submit">
-              <i class="bi bi-arrow-clockwise"></i> Purge
-            </button>
-          </form>
+          <button
+            id="purge-btn"
+            class="btn btn-outline-light"
+            data-url="{{ url_for('cleanup_route') }}"
+          >
+            <i class="bi bi-arrow-clockwise"></i> Purge
+          </button
         </div>
       </div>
     </nav>
