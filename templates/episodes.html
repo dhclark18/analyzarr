@@ -37,21 +37,13 @@
             <td>{{ ep.confidence }}</td>
             <td>
               {% if 'problematic-episode' in tag_list and ep.sonarr_id %}
-                <form
-                  action="{{ url_for('auto_fix', series_id=series_id) }}"
-                  method="post"
-                  class="d-inline"
+                <button
+                  class="btn btn-sm btn-warning auto-fix-btn"
+                  data-series-id="{{ series_id }}"
+                  data-episode-id="{{ ep.sonarr_id }}"
                 >
-                  <!-- EXACT numeric Sonarr ID; no code parsing downstream -->
-                  <input
-                    type="hidden"
-                    name="episode_id"
-                    value="{{ ep.sonarr_id }}"
-                  >
-                  <button type="submit" class="btn btn-sm btn-warning">
-                    <i class="bi bi-tools"></i> Auto-Fix
-                  </button>
-                </form>
+                  <i class="bi bi-tools"></i> Auto-Fix
+                </button>
               {% elif 'problematic-episode' in tag_list and not ep.sonarr_id %}
                 <span class="text-warning small">No Sonarr ID</span>
               {% endif %}
@@ -61,4 +53,52 @@
       </tbody>
     </table>
   {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".auto-fix-btn").forEach(btn => {
+    btn.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      const seriesId  = btn.dataset.seriesId;
+      const episodeId = btn.dataset.episodeId;
+
+      // 1) Disable the button & show spinner
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Working';
+
+      // 2) Fire off the POST with JSON, blocking until Sonarr finishes
+      try {
+        const resp = await fetch(
+          `/series/${seriesId}/episode/auto-fix`,
+          {
+            method:  "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ episode_id: episodeId })
+          }
+        );
+        const data = await resp.json();
+        if (!resp.ok || data.status !== "success") {
+          throw new Error(data.message || "Auto-Fix failed");
+        }
+
+        // 3a) On success, update the button to “Done”
+        btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> Done';
+        // Optionally: reload row or the entire page after a short delay:
+        setTimeout(() => window.location.reload(), 1000);
+      }
+      catch(err) {
+        console.error(err);
+        // 3b) On error, re-enable and show an alert
+        btn.disabled   = false;
+        btn.innerHTML  = '<i class="bi bi-tools"></i> Auto-Fix';
+        alert("Auto-Fix error: " + err.message);
+      }
+    });
+  });
+});
+</script>
 {% endblock %}
