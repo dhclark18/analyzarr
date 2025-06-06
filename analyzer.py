@@ -5,7 +5,7 @@ Features:
  - Pooled PostgreSQL connections (psycopg2 SimpleConnectionPool)
  - Modular SonarrClient with unified error handling, heavily based on Huntarr project
  - Reads mismatch counts from an external incrementer script
- - Tags episode as matched or porblematic
+ - Tags episode as matched or problematic
 """
 
 import os
@@ -544,12 +544,26 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
         logging.info(f"⬇️ Queued '{best_candidate.get('title')}' via release/push")
     else:
         logging.info("Failed to push release into Sonarr")
-     
+
+def has_override_tag(conn, key: str) -> bool:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT 1
+            FROM episode_tags et
+            JOIN tags t ON et.tag_id = t.id
+            WHERE et.episode_key = %s AND t.name = 'override'
+        """, (key,))
+        return cur.fetchone() is not None     
 # -----------------------------------------------------------------------------
 # Core Logic
 # -----------------------------------------------------------------------------
 
 def check_episode(client: SonarrClient, series: dict, ep: dict):
+    
+    if has_override_tag(conn, key):
+        logger.info(f"🛑 Skipping {key} — manually overridden")
+        return
+
     if not ep.get("hasFile") or not ep.get("episodeFileId"):
         return
 
