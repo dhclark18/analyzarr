@@ -89,7 +89,8 @@ def view_series(series_id):
     conn = get_db()
     cur  = conn.cursor()
     cur.execute("""
-        SELECT 
+        SELECT
+          e.key,
           e.code,
           e.expected_title,
           e.actual_title,
@@ -99,7 +100,7 @@ def view_series(series_id):
         LEFT JOIN episode_tags et ON e.key = et.episode_key
         LEFT JOIN tags t          ON et.tag_id = t.id
         WHERE e.series_title = %s
-        GROUP BY e.key
+        GROUP BY e.key, e.code, e.expected_title, e.actual_title, e.confidence
         ORDER BY e.code
     """, (info["title"],))
     db_rows = cur.fetchall()
