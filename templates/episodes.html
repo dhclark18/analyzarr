@@ -32,7 +32,11 @@
               {% endif %}
             </td>
             <td>{{ ep.code }}</td>
-            <td>{{ ep.expected_title }}</td>
+            <td>
+              <a href="{{ url_for('episode_details', series_id=series_id, key=ep.key) }}">
+                {{ ep.expected_title }}
+              </a>
+            </td>
             <td>{{ ep.actual_title }}</td>
             <td>
               {{ ep.confidence }}
