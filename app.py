@@ -232,35 +232,70 @@ def override_episode():
     conn = get_db()
     cur = conn.cursor()
 
-    # Ensure the override tag exists
-    cur.execute("SELECT id FROM tags WHERE name = %s", ("override",))
+    # 1) Update confidence to 1.0 in episodes table
+    cur.execute(
+        "UPDATE episodes SET confidence = %s WHERE key = %s",
+        (1.0, key)
+    )
+
+    # 2) Remove any 'problematic-episode' tag for this episode
+    #    (First, look up the tag_id for 'problematic-episode')
+    cur.execute("SELECT id FROM tags WHERE name = %s", ("problematic-episode",))
     row = cur.fetchone()
     if row:
-        tag_id = row["id"]
+        prob_tag_id = row["id"]
+        cur.execute(
+            "DELETE FROM episode_tags WHERE episode_key = %s AND tag_id = %s",
+            (key, prob_tag_id)
+        )
+
+    # 3) Ensure the 'matched' tag exists (insert if missing)
+    cur.execute("SELECT id FROM tags WHERE name = %s", ("matched",))
+    row = cur.fetchone()
+    if row:
+        matched_tag_id = row["id"]
     else:
         cur.execute(
             "INSERT INTO tags (name) VALUES (%s) RETURNING id",
-            ("override",)
+            ("matched",)
         )
-        new_row = cur.fetchone()
-        tag_id = new_row["id"]
-        conn.commit()
-
-    # Apply the override tag to the episode
+        matched_tag_id = cur.fetchone()["id"]
+    #    Add 'matched' to episode_tags (ignore conflict)
     cur.execute(
         """
         INSERT INTO episode_tags (episode_key, tag_id)
         VALUES (%s, %s)
         ON CONFLICT DO NOTHING
         """,
-        (key, tag_id)
+        (key, matched_tag_id)
     )
-    conn.commit()
 
+    # 4) Ensure the 'override' tag exists (insert if missing)
+    cur.execute("SELECT id FROM tags WHERE name = %s", ("override",))
+    row = cur.fetchone()
+    if row:
+        override_tag_id = row["id"]
+    else:
+        cur.execute(
+            "INSERT INTO tags (name) VALUES (%s) RETURNING id",
+            ("override",)
+        )
+        override_tag_id = cur.fetchone()["id"]
+    #    Add 'override' to episode_tags (ignore conflict)
+    cur.execute(
+        """
+        INSERT INTO episode_tags (episode_key, tag_id)
+        VALUES (%s, %s)
+        ON CONFLICT DO NOTHING
+        """,
+        (key, override_tag_id)
+    )
+
+    conn.commit()
     cur.close()
     conn.close()
 
-    flash(f"Episode {key} overridden and tagged.", "success")
+    flash(f"Episode {key} overridden: confidence set to 1.0, tags updated.", "success")
     return redirect(request.referrer or url_for("index"))
 
 if __name__ == "__main__":
