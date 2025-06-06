@@ -213,5 +213,39 @@ def auto_fix(series_id: int):
     # 4) Success
     return jsonify({"status":"success", "message":"Auto-Fix complete"}), 200
 
+@app.route("/override", methods=["POST"])
+def override_episode():
+    key = request.form.get("key")
+    if not key:
+        flash("No key provided for override", "danger")
+        return redirect(request.referrer or url_for("index"))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Ensure the override tag exists
+    cur.execute("SELECT id FROM tags WHERE name = %s", ("override",))
+    tag = cur.fetchone()
+    if tag:
+        tag_id = tag[0]
+    else:
+        cur.execute("INSERT INTO tags (name) VALUES (%s) RETURNING id", ("override",))
+        tag_id = cur.fetchone()[0]
+        conn.commit()
+
+    # Apply the override tag to the episode
+    cur.execute("""
+        INSERT INTO episode_tags (episode_key, tag_id)
+        VALUES (%s, %s)
+        ON CONFLICT DO NOTHING
+    """, (key, tag_id))
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+    flash(f"Episode {key} overridden and tagged.", "success")
+    return redirect(request.referrer or url_for("index"))
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
