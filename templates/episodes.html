@@ -20,9 +20,9 @@
       </thead>
       <tbody>
         {% for ep in eps %}
+          {% set tag_list = ep.tags.split(',') if ep.tags else [] %}
           <tr>
             <td class="text-center">
-              {% set tag_list = ep.tags.split(',') if ep.tags else [] %}
               {% if 'matched' in tag_list %}
                 <i class="bi bi-check-circle-fill text-success"></i>
               {% elif 'problematic-episode' in tag_list %}
@@ -36,6 +36,7 @@
             <td>{{ ep.actual_title }}</td>
             <td>{{ ep.confidence }}</td>
             <td>
+              {# ─────────── Auto-Fix logic ─────────── #}
               {% if 'problematic-episode' in tag_list and ep.sonarr_id %}
                 <button
                   class="btn btn-sm btn-warning auto-fix-btn"
@@ -46,6 +47,16 @@
                 </button>
               {% elif 'problematic-episode' in tag_list and not ep.sonarr_id %}
                 <span class="text-warning small">No Sonarr ID</span>
+              {% endif %}
+
+              {# ─────────── “Override” button (only when mismatch/problematic) ─────────── #}
+              {% if 'problematic-episode' in tag_list %}
+                <form method="POST" action="{{ url_for('override_episode') }}" class="d-inline ms-2">
+                  <input type="hidden" name="key" value="{{ ep.key }}">
+                  <button type="submit" class="btn btn-success btn-sm" title="Mark as Correct">
+                    <i class="bi bi-shield-check"></i> Override
+                  </button>
+                </form>
               {% endif %}
             </td>
           </tr>
@@ -70,11 +81,14 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Working';
 
       try {
-        const resp = await fetch(`/series/${seriesId}/episode/auto-fix`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ episode_id: episodeId })
-        });
+        const resp = await fetch(
+          `/series/${seriesId}/episode/auto-fix`,
+          {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ episode_id: episodeId })
+          }
+        );
         const data = await resp.json();
         if (!resp.ok || data.status !== "success") {
           throw new Error(data.message || "Auto-Fix failed");
@@ -91,7 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // ─── Purge button code ────────────────────────────────────────────────────
+  // ─── Purge button code ────────────────────────────────────
   const purgeBtn = document.getElementById("purge-btn");
   if (purgeBtn) {
     purgeBtn.addEventListener("click", async (ev) => {
