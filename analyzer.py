@@ -99,8 +99,7 @@ def init_db(conn):
           norm_expected      TEXT    NOT NULL DEFAULT '',
           norm_extracted     TEXT    NOT NULL DEFAULT '',
           substring_override BOOLEAN NOT NULL DEFAULT FALSE,
-          missing_title      BOOLEAN NOT NULL DEFAULT FALSE,
-          title_score        REAL    NOT NULL DEFAULT 0.0    
+          missing_title      BOOLEAN NOT NULL DEFAULT FALSE   
         );
     """)
 
