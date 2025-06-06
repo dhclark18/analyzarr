@@ -229,26 +229,32 @@ def override_episode():
         flash("No key provided for override", "danger")
         return redirect(request.referrer or url_for("index"))
 
-    # Use get_db() (not get_db_connection)
     conn = get_db()
     cur = conn.cursor()
 
     # Ensure the override tag exists
     cur.execute("SELECT id FROM tags WHERE name = %s", ("override",))
-    tag = cur.fetchone()
-    if tag:
-        tag_id = tag[0]
+    row = cur.fetchone()
+    if row:
+        tag_id = row["id"]
     else:
-        cur.execute("INSERT INTO tags (name) VALUES (%s) RETURNING id", ("override",))
-        tag_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO tags (name) VALUES (%s) RETURNING id",
+            ("override",)
+        )
+        new_row = cur.fetchone()
+        tag_id = new_row["id"]
         conn.commit()
 
     # Apply the override tag to the episode
-    cur.execute("""
+    cur.execute(
+        """
         INSERT INTO episode_tags (episode_key, tag_id)
         VALUES (%s, %s)
         ON CONFLICT DO NOTHING
-    """, (key, tag_id))
+        """,
+        (key, tag_id)
+    )
     conn.commit()
 
     cur.close()
