@@ -187,25 +187,54 @@ def remove_tag(conn, episode_key: str, tag_name: str) -> bool:
 @with_conn
 def insert_episode(
     conn,
+    *,
     key: str,
     series_title: str,
     code: str,
     expected_title: str,
     actual_title: str,
-    confidence: float
+    confidence: float,
+    norm_expected: str,
+    norm_extracted: str,
+    substring_override: bool,
+    missing_title: bool
 ):
     with conn.cursor() as cur:
-        cur.execute(
-            """
+        cur.execute("""
             INSERT INTO episodes
-              (key, series_title, code, expected_title, actual_title, confidence)
-            VALUES (%s, %s, %s, %s, %s, %s)
+              (key,
+               series_title,
+               code,
+               expected_title,
+               actual_title,
+               confidence,
+               norm_expected,
+               norm_extracted,
+               substring_override,
+               missing_title)
+            VALUES
+              (%s, %s, %s, %s, %s,
+               %s, %s, %s, %s,
+               %s)
             ON CONFLICT (key) DO UPDATE
-              SET actual_title   = EXCLUDED.actual_title,
-                  confidence     = EXCLUDED.confidence
-            """,
-            (key, series_title, code, expected_title, actual_title, confidence)
-        )
+              SET actual_title       = EXCLUDED.actual_title,
+                  confidence         = EXCLUDED.confidence,
+                  norm_expected      = EXCLUDED.norm_expected,
+                  norm_extracted     = EXCLUDED.norm_extracted,
+                  substring_override = EXCLUDED.substring_override,
+                  missing_title      = EXCLUDED.missing_title,
+        """, (
+            key,
+            series_title,
+            code,
+            expected_title,
+            actual_title,
+            confidence,
+            norm_expected,
+            norm_extracted,
+            substring_override,
+            missing_title
+        ))
     conn.commit()
 
 @with_conn 
@@ -354,6 +383,8 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
     # 2) Extract just the title portion from the scene file name
     raw_scene_title = extract_scene_title(scene_name)
     norm_extracted_scene = normalize_title(raw_scene_title)
+    
+    # 3) However use the entire normalized scene name to do the comparison for perfect matches   
     norm_scene = normalize_title(scene_name)
 
     logging.debug(f"Raw scene: {raw_scene_title!r}")
@@ -568,32 +599,31 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     if epfile is None:
         logging.error(f"❌ Failed to fetch file metadata for {series['title']} ep {ep['id']}")
         return
-
+  
     raw   = epfile.get("sceneName") or epfile.get("relativePath") or epfile.get("path") or ""
     scene = os.path.basename(raw)
-
-    # parse season/episode from sceneName to build the same key as the incrementer
-    m = re.search(r"[sS](\d{2})[eE](\d{2})", scene)
-    if m:
-        parsed_season, parsed_epnum = map(int, m.groups())
-    else:
-        parsed_season = ep["seasonNumber"]
-        parsed_epnum  = ep["episodeNumber"]
+    parsed_season = ep["seasonNumber"]
+    parsed_epnum  = ep["episodeNumber"]
 
     key  = f"series::{normalize_title(series['title'])}::S{parsed_season:02d}E{parsed_epnum:02d}"
     code = f"S{parsed_season:02d}E{parsed_epnum:02d}"
     nice = series["title"]
-
-    expected_title = ep["title"]
-    expected_norm = normalize_title(expected_title)
-    actual_norm   = normalize_title(scene)
     
+    # 1) Normalize expected
+    expected_title = ep["title"]
+    norm_expected = normalize_title(expected_title)
+
+    # 2) Extract just the title portion from the scene file name
+    raw_scene_title = extract_scene_title(scene)
+    norm_extracted = normalize_title(raw_scene_title)
+
+    norm_scene = normalize_title(scene)
+    substring_override = (norm_expected in norm_extracted)
+    missing_title      = is_missing_title(scene_name, expected_title)
+
     logging.info(f"\n📺 {nice} {code}")
     logging.info(f"🎯 Expected: {ep['title']}")
     logging.info(f"🎞️ Scene:    {scene}")
-    logging.debug(f"Normalized expected (main): {expected_norm!r}")
-    logging.debug(f"Normalized scene (main)  : {actual_norm!r}")
-    logging.debug(f"Substring match? (main)  : {expected_norm in actual_norm}")
 
     # Skip matching logic if episode has override tag 
     if has_override_tag(key):
@@ -603,7 +633,7 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     confidence = compute_confidence(expected_title, scene)
     
     insert_episode(
-        key, nice, code, expected_title, scene, confidence
+        key, nice, code, expected_title, scene, confidence, norm_expected, norm_extracted, substring_override, missing_title
     )
 
     # On match: check for and add matched tag
