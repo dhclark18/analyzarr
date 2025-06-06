@@ -190,31 +190,46 @@ def remove_tag(conn, episode_key: str, tag_name: str) -> bool:
     return deleted
 
 @with_conn
-def insert_episode(conn, key: str, series_title: str, code: str, expected_title: str, actual_title: str, confidence: float, norm_expected: str, norm_extracted: str, substring_override: bool, missing_title: bool):
+def insert_episode(
+    conn,
+    key: str,
+    series_title: str,
+    code: str,
+    expected_title: str,
+    actual_title: str,
+    confidence: float,
+    norm_expected: str,
+    norm_extracted: str,
+    substring_override: bool,
+    missing_title: bool
+):
     with conn.cursor() as cur:
         cur.execute("""
-            INSERT INTO episodes
-              (key,
-               series_title,
-               code,
-               expected_title,
-               actual_title,
-               confidence,
-               norm_expected,
-               norm_extracted,
-               substring_override,
-               missing_title)
-            VALUES
-              (%s, %s, %s, %s, %s,
-               %s, %s, %s, %s,
-               %s)
+            INSERT INTO episodes (
+                key,
+                series_title,
+                code,
+                expected_title,
+                actual_title,
+                confidence,
+                norm_expected,
+                norm_extracted,
+                substring_override,
+                missing_title
+            )
+            VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s
+            )
             ON CONFLICT (key) DO UPDATE
-              SET actual_title       = EXCLUDED.actual_title,
-                  confidence         = EXCLUDED.confidence,
-                  norm_expected      = EXCLUDED.norm_expected,
-                  norm_extracted     = EXCLUDED.norm_extracted,
-                  substring_override = EXCLUDED.substring_override,
-                  missing_title      = EXCLUDED.missing_title,
+            SET
+                actual_title       = EXCLUDED.actual_title,
+                confidence         = EXCLUDED.confidence,
+                norm_expected      = EXCLUDED.norm_expected,
+                norm_extracted     = EXCLUDED.norm_extracted,
+                substring_override = EXCLUDED.substring_override,
+                missing_title      = EXCLUDED.missing_title;
         """, (
             key,
             series_title,
