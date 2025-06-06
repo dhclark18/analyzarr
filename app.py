@@ -346,6 +346,7 @@ def episode_details(series_id, key):
     norm_expected       = row["norm_expected"]
     norm_extracted      = row["norm_extracted"]
     substring_override  = row["substring_override"]
+    missing_title       = row["missing_title"]
     tags_csv            = row["tags"]
     tag_list            = tags_csv.split(',') if tags_csv else []
 
