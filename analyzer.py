@@ -561,11 +561,6 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
 # -----------------------------------------------------------------------------
 
 def check_episode(client: SonarrClient, series: dict, ep: dict):
-    
-    if has_override_tag(key):
-        logger.info(f"🛑 Skipping {key} — manually overridden")
-        return
-
     if not ep.get("hasFile") or not ep.get("episodeFileId"):
         return
 
@@ -592,7 +587,7 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     expected_title = ep["title"]
     expected_norm = normalize_title(expected_title)
     actual_norm   = normalize_title(scene)
-
+    
     logging.info(f"\n📺 {nice} {code}")
     logging.info(f"🎯 Expected: {ep['title']}")
     logging.info(f"🎞️ Scene:    {scene}")
@@ -600,6 +595,10 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     logging.debug(f"Normalized scene (main)  : {actual_norm!r}")
     logging.debug(f"Substring match? (main)  : {expected_norm in actual_norm}")
     
+    if has_override_tag(key):
+        logger.info(f"🛑 Skipping {key} — manually overridden")
+        return
+     
     confidence = compute_confidence(expected_title, scene)
     
     insert_episode(
