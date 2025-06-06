@@ -36,27 +36,34 @@
             <td>{{ ep.actual_title }}</td>
             <td>{{ ep.confidence }}</td>
             <td>
-              {# ─────────── Auto-Fix logic ─────────── #}
-              {% if 'problematic-episode' in tag_list and ep.sonarr_id %}
-                <button
-                  class="btn btn-sm btn-warning auto-fix-btn"
-                  data-series-id="{{ series_id }}"
-                  data-episode-id="{{ ep.sonarr_id }}"
-                >
-                  <i class="bi bi-tools"></i> Auto-Fix
-                </button>
-              {% elif 'problematic-episode' in tag_list and not ep.sonarr_id %}
-                <span class="text-warning small">No Sonarr ID</span>
-              {% endif %}
-
-              {# ─────────── “Override” button (only when mismatch/problematic) ─────────── #}
               {% if 'problematic-episode' in tag_list %}
-                <form method="POST" action="{{ url_for('override_episode') }}" class="d-inline ms-2">
-                  <input type="hidden" name="key" value="{{ ep.key }}">
-                  <button type="submit" class="btn btn-success btn-sm" title="Mark as Correct">
-                    <i class="bi bi-shield-check"></i> Override
-                  </button>
-                </form>
+                <div class="btn-group" role="group">
+                  {# ── Auto-Fix button ── #}
+                  {% if ep.sonarr_id %}
+                    <button
+                      class="btn btn-warning btn-sm auto-fix-btn"
+                      data-series-id="{{ series_id }}"
+                      data-episode-id="{{ ep.sonarr_id }}"
+                      title="Auto-Fix via Sonarr"
+                    >
+                      <i class="bi bi-tools"></i>
+                    </button>
+                  {% else %}
+                    <button class="btn btn-warning btn-sm" disabled title="No Sonarr ID">
+                      <i class="bi bi-tools"></i>
+                    </button>
+                  {% endif %}
+
+                  {# ── Override button ── #}
+                  <form method="POST"
+                        action="{{ url_for('override_episode') }}"
+                        class="m-0 p-0">
+                    <input type="hidden" name="key" value="{{ ep.key }}">
+                    <button type="submit" class="btn btn-success btn-sm" title="Mark as Correct">
+                      <i class="bi bi-shield-check"></i>
+                    </button>
+                  </form>
+                </div>
               {% endif %}
             </td>
           </tr>
