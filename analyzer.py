@@ -207,6 +207,17 @@ def insert_episode(
             (key, series_title, code, expected_title, actual_title, confidence)
         )
     conn.commit()
+
+@with_conn 
+def has_override_tag(conn, key: str) -> bool:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT 1
+            FROM episode_tags et
+            JOIN tags t ON et.tag_id = t.id
+            WHERE et.episode_key = %s AND t.name = 'override'
+        """, (key,))
+        return cur.fetchone() is not None  
 # -----------------------------------------------------------------------------
 # Sonarr API Client
 # -----------------------------------------------------------------------------
@@ -544,16 +555,7 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
         logging.info(f"⬇️ Queued '{best_candidate.get('title')}' via release/push")
     else:
         logging.info("Failed to push release into Sonarr")
-
-def has_override_tag(conn, key: str) -> bool:
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT 1
-            FROM episode_tags et
-            JOIN tags t ON et.tag_id = t.id
-            WHERE et.episode_key = %s AND t.name = 'override'
-        """, (key,))
-        return cur.fetchone() is not None     
+   
 # -----------------------------------------------------------------------------
 # Core Logic
 # -----------------------------------------------------------------------------
