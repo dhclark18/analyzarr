@@ -562,7 +562,7 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
 
 def check_episode(client: SonarrClient, series: dict, ep: dict):
     
-    if has_override_tag(conn, key):
+    if has_override_tag(key):
         logger.info(f"🛑 Skipping {key} — manually overridden")
         return
 
