@@ -190,20 +190,7 @@ def remove_tag(conn, episode_key: str, tag_name: str) -> bool:
     return deleted
 
 @with_conn
-def insert_episode(
-    conn,
-    *,
-    key: str,
-    series_title: str,
-    code: str,
-    expected_title: str,
-    actual_title: str,
-    confidence: float,
-    norm_expected: str,
-    norm_extracted: str,
-    substring_override: bool,
-    missing_title: bool
-):
+def insert_episode(conn, key: str, series_title: str, code: str, expected_title: str, actual_title: str, confidence: float, norm_expected: str, norm_extracted: str, substring_override: bool, missing_title: bool):
     with conn.cursor() as cur:
         cur.execute("""
             INSERT INTO episodes
