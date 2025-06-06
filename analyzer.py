@@ -594,7 +594,8 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     logging.debug(f"Normalized expected (main): {expected_norm!r}")
     logging.debug(f"Normalized scene (main)  : {actual_norm!r}")
     logging.debug(f"Substring match? (main)  : {expected_norm in actual_norm}")
-    
+
+    # Skip matching logic if episode has override tag 
     if has_override_tag(key):
         logger.info(f"🛑 Skipping {key} — manually overridden")
         return
