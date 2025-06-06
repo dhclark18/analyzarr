@@ -95,7 +95,12 @@ def init_db(conn):
           series_title   TEXT NOT NULL,
           expected_title TEXT NOT NULL,
           actual_title   TEXT NOT NULL,
-          confidence     TEXT NOT NULL
+          confidence         REAL    NOT NULL DEFAULT 0.0,
+          norm_expected      TEXT    NOT NULL DEFAULT '',
+          norm_extracted     TEXT    NOT NULL DEFAULT '',
+          substring_override BOOLEAN NOT NULL DEFAULT FALSE,
+          missing_title      BOOLEAN NOT NULL DEFAULT FALSE,
+          title_score        REAL    NOT NULL DEFAULT 0.0    
         );
     """)
 
@@ -619,7 +624,7 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
 
     norm_scene = normalize_title(scene)
     substring_override = (norm_expected in norm_extracted)
-    missing_title      = is_missing_title(scene_name, expected_title)
+    missing_title      = is_missing_title(scene, expected_title)
 
     logging.info(f"\n📺 {nice} {code}")
     logging.info(f"🎯 Expected: {ep['title']}")
