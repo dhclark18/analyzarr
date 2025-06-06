@@ -34,7 +34,10 @@
             <td>{{ ep.code }}</td>
             <td>{{ ep.expected_title }}</td>
             <td>{{ ep.actual_title }}</td>
-            <td>{{ ep.confidence }}</td>
+            <td>
+              {{ ep.confidence }}
+              {% if 'override' in tag_list %}*{% endif %}
+            </td>
             <td>
               {% if 'problematic-episode' in tag_list %}
                 <div class="btn-group" role="group">
