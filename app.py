@@ -297,6 +297,75 @@ def override_episode():
 
     flash(f"Episode {key} overridden: confidence set to 1.0, tags updated.", "success")
     return redirect(request.referrer or url_for("index"))
+@app.route("/series/<int:series_id>/episode/<key>")
+def episode_details(series_id, key):
+    # 1) Find the series title
+    all_series = fetch_series_from_sonarr()
+    info = next((s for s in all_series if s["id"] == series_id), None)
+    if not info:
+        abort(404, description="Series not found in Sonarr")
+    series_title = info["title"]
 
+    # 2) Fetch the episode row, including all new columns
+    conn = get_db()
+    cur  = conn.cursor()
+    cur.execute("""
+        SELECT
+          e.expected_title,
+          e.actual_title,
+          e.confidence AS stored_conf,
+          e.norm_expected,
+          e.norm_extracted,
+          e.substring_override,
+          e.missing_title,
+          COALESCE(string_agg(t.name, ','), '') AS tags
+        FROM episodes e
+        LEFT JOIN episode_tags et ON e.key = et.episode_key
+        LEFT JOIN tags t        ON et.tag_id = t.id
+        WHERE e.key = %s AND e.series_title = %s
+        GROUP BY
+          e.expected_title,
+          e.actual_title,
+          e.confidence,
+          e.norm_expected,
+          e.norm_extracted,
+          e.substring_override,
+          e.missing_title;
+    """, (key, series_title))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not row:
+        abort(404, description="Episode not found in database")
+
+    # 3) Unpack everything
+    expected_title      = row["expected_title"]
+    actual_title        = row["actual_title"]
+    stored_conf         = float(row["stored_conf"])
+    norm_expected       = row["norm_expected"]
+    norm_extracted      = row["norm_extracted"]
+    substring_override  = row["substring_override"]
+    tags_csv            = row["tags"]
+    tag_list            = tags_csv.split(',') if tags_csv else []
+
+    # 4) Pass directly into the template
+    return render_template(
+        "episode_details.html",
+        series_id=series_id,
+        series_title=series_title,
+        key=key,
+        expected_title=expected_title,
+        actual_title=actual_title,
+        stored_conf=stored_conf,
+        norm_expected=norm_expected,
+        norm_extracted=norm_extracted,
+        substring_override=substring_override,
+        missing_title=missing_title,
+        base_conf=0.8,    # if you want to display your “base_conf” constant
+        exp=1,            # if you want to show your exponent
+        tag_list=tag_list
+    )
+    
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
