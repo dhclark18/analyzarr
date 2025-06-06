@@ -2,7 +2,10 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
-from flask import Flask, render_template, abort, flash, redirect, url_for, request, jsonify
+from flask import (
+    Flask, render_template, abort, flash,
+    redirect, url_for, request, jsonify
+)
 from analyzer import SonarrClient, grab_best_nzb, delete_episode_file, compute_confidence
 import re
 import logging
@@ -85,7 +88,7 @@ def view_series(series_id):
     if not info:
         abort(404, description="Series not found in Sonarr")
 
-    # 2) Pull episodes + tags from Postgres (same as before)
+    # 2) Pull episodes + tags from Postgres (now selecting e.key too)
     conn = get_db()
     cur  = conn.cursor()
     cur.execute("""
@@ -101,7 +104,7 @@ def view_series(series_id):
         LEFT JOIN tags t          ON et.tag_id = t.id
         WHERE e.series_title = %s
         GROUP BY e.key, e.code, e.expected_title, e.actual_title, e.confidence
-        ORDER BY e.code
+        ORDER BY e.code;
     """, (info["title"],))
     db_rows = cur.fetchall()
     cur.close()
@@ -119,10 +122,16 @@ def view_series(series_id):
         for ep in sonarr_eps
     }
 
-    # 4) Enrich each DB row with the correct Sonarr ID
+    # 4) Enrich each DB row with the correct Sonarr ID AND preserve “key”
     enriched_rows = []
-    for ep in db_rows:
-        code = ep["code"]  # e.g. "S14E11"
+    for row in db_rows:
+        key            = row["key"]
+        code           = row["code"]           # e.g. "S14E11"
+        expected_title = row["expected_title"]
+        actual_title   = row["actual_title"]
+        confidence     = row["confidence"]
+        tags           = row["tags"]
+
         m = re.match(r"(?i)^S(\d{2})E(\d{2})$", code)
         if not m:
             sonarr_id = None
@@ -132,11 +141,12 @@ def view_series(series_id):
             sonarr_id = by_season_ep.get((season, epnum))
 
         enriched_rows.append({
+            "key":            key,
             "code":           code,
-            "expected_title": ep["expected_title"],
-            "actual_title":   ep["actual_title"],
-            "confidence":     ep["confidence"],
-            "tags":           ep["tags"],
+            "expected_title": expected_title,
+            "actual_title":   actual_title,
+            "confidence":     confidence,
+            "tags":           tags,
             "sonarr_id":      sonarr_id
         })
 
@@ -177,8 +187,6 @@ def auto_fix(series_id: int):
     3) Call grab_best_nzb(...) synchronously.
     4) Return JSON when done.
     """
-    from flask import jsonify
-
     # 1) Pull episode_id from JSON body (not form)
     data = request.get_json(silent=True) or {}
     episode_id = data.get("episode_id")
@@ -221,7 +229,8 @@ def override_episode():
         flash("No key provided for override", "danger")
         return redirect(request.referrer or url_for("index"))
 
-    conn = get_db_connection()
+    # Use get_db() (not get_db_connection)
+    conn = get_db()
     cur = conn.cursor()
 
     # Ensure the override tag exists
