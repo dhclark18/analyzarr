@@ -4,64 +4,79 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Sonarr Library{% endblock %}</title>
+
+    <!-- Bootstrap CSS -->
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet">
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
       rel="stylesheet">
+
     <style>
-      /* Theme-aware accordion background via data-bs-theme */
+      /* ─── Theme‐aware accordion background ───────────────────────────────── */
       html[data-bs-theme="dark"] .accordion .accordion-body {
         background-color: rgba(255,255,255,0.06);
       }
       html[data-bs-theme="light"] .accordion .accordion-body {
         background-color: rgba(0,0,0,0.1);
       }
-      /* ─── Global font scaling ───────────────────────────────────────── */
-      html {
-        font-size: 1.15rem;    /* up from 1rem */
+
+      /* ─── Lighten .table-dark under dark theme ───────────────────────────── */
+      html[data-bs-theme="dark"] .table-dark {
+        /* bump table bg from #212529 to #2c2c2c */
+        --bs-table-bg: #2c2c2c;
+        /* force any striped rows to match */
+        --bs-table-striped-bg: #2c2c2c;
       }
-    
-      /* ─── Container padding ─────────────────────────────────────────── */
+      html[data-bs-theme="dark"]
+        .table-dark.table-striped>tbody>tr:nth-of-type(odd)>* {
+        background-color: var(--bs-table-bg) !important;
+      }
+
+      /* ─── Global font scaling & spacing ─────────────────────────────────── */
+      html { font-size: 1.15rem; }
       .container {
-        padding-left: 0.5rem;  /* shrink horizontal gutters */
-        padding-right: 0.5rem;
-        padding-top: 1rem;     /* shrink vertical gutters */
-        padding-bottom: 1rem;
+        padding: 1rem 0.5rem;
       }
-    
-      /* ─── Headings margin & size ─────────────────────────────────────── */
-      h1 {
-        font-size: 2.5rem;     /* bigger main title */
-        margin-bottom: 0.5rem; /* less space below */
-      }
-      h2 {
-        font-size: 2rem;
-        margin-top: 1rem;
-        margin-bottom: 0.5rem;
-      }
-    
-      /* ─── Table cell padding ────────────────────────────────────────── */
+      h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+      h2 { font-size: 2rem; margin: 1rem 0 0.5rem; }
       .table th,
-      .table td {
-        padding: 0.3rem 0.5rem; /* tighter cells */
+      .table td { padding: 0.3rem 0.5rem; }
+      .btn-sm { font-size: 0.9rem; padding: 0.3rem 0.6rem; }
+
+      /* ─── Accordion border & collapse fixes ─────────────────────────────── */
+      .accordion-item {
+        border: 1px solid var(--bs-border-color) !important;
+        border-radius: 0.25rem !important;
+        overflow: hidden;
+        margin-bottom: 1rem;
       }
-    
-      /* ─── Accordion button padding & font ───────────────────────────── */
       .accordion-button {
-        font-size: 1.05rem;
+        background: transparent;
+        border: none !important;
+        border-radius: 0 !important;
         padding: 0.5rem 1rem;
+        font-size: 1.05rem;
+        cursor: pointer;
       }
-    
-      /* ─── Nav-pills spacing & font ──────────────────────────────────── */
+      .accordion-button.collapsed {
+        border-bottom: 1px solid var(--bs-border-color) !important;
+      }
+      .accordion-collapse {
+        border: none !important;
+      }
+      .accordion-body {
+        padding: 0;
+        background: transparent;
+      }
+
+      /* ─── Nav‐pills & filter controls ───────────────────────────────────── */
       .nav-pills .nav-link {
         font-size: 1rem;
         padding: 0.4rem 0.75rem;
         margin-right: 0.25rem;
       }
-    
-      /* ─── Search & slider controls ──────────────────────────────────── */
       #searchInput {
         font-size: 1rem;
         padding: 0.4rem 0.75rem;
@@ -69,43 +84,11 @@
       #confSlider {
         height: 1rem;
       }
-    
-      /* ─── Buttons ───────────────────────────────────────────────────── */
-      .btn-sm {
-        font-size: 0.9rem;
-        padding: 0.3rem 0.6rem;
-      }
-      
-      /* ─── Fix accordion borders when collapsed ─────────────────────────── */
-      .accordion-item {
-        border: 1px solid var(--bs-border-color);
-        border-radius: .25rem;
-        overflow: hidden;            /* clip children to the rounded box */
-        margin-bottom: .5rem;        /* optional spacing between items */
-      }
-      
-      /* remove the default header border so we don’t double-stroke */
-      .accordion-button {
-        border: none;
-      }
-      
-      /* when collapsed, draw the bottom edge on the header */
-      .accordion-button.collapsed {
-        border-bottom: 1px solid var(--bs-border-color);
-      }
-      
-      /* the inner collapse panel shouldn’t re-draw a top border */
-      .accordion-collapse {
-        border-top: none;
-      }
-      /* Add some vertical gap between each season panel */
-      .accordion-item {
-        margin-bottom: 1rem;
-      }
     </style>
   </head>
+
   <body class="bg-dark text-light">
-    <!-- ─── Navbar with Purge button ──────────────────────────────────────────── -->
+    <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
       <div class="container-fluid">
         <a class="navbar-brand" href="{{ url_for('index') }}">Sonarr Library</a>
@@ -122,36 +105,26 @@
         </button>
 
         <div class="collapse navbar-collapse" id="navbarContent">
-          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <!-- (You can add other nav links here if needed) -->
-          </ul>
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0"></ul>
           <button
             id="purge-btn"
             class="btn btn-outline-light"
             data-url="{{ url_for('cleanup_route') }}"
           >
             <i class="bi bi-arrow-clockwise"></i> Purge
-          </button
+          </button>
         </div>
       </div>
     </nav>
 
     <div class="container py-4">
-      <!-- ─── Flash messages ──────────────────────────────────────────────────── -->
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, msg in messages %}
-            <div
-              class="alert alert-{{ category }} alert-dismissible fade show"
-              role="alert"
-            >
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
               {{ msg }}
-              <button
-                type="button"
-                class="btn-close btn-close-white"
-                data-bs-dismiss="alert"
-                aria-label="Close"
-              ></button>
+              <button type="button" class="btn-close btn-close-white"
+                      data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
           {% endfor %}
         {% endif %}
@@ -160,11 +133,8 @@
       {% block content %}{% endblock %}
     </div>
 
-    <script
-      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
-    </script>
-
-    {# Allow child templates (like episodes.html) to inject their own JS #}
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>
