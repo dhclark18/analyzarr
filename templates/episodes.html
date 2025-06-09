@@ -22,28 +22,28 @@
   </ul>
 
   {# ─── Search + Confidence Slider Filters ──────────────────────────────────── #}
-  <div class="row mb-4">
+  <div class="row mb-4 align-items-center">
     <div class="col-md-6">
       <input
-        type="text"
         id="searchInput"
+        type="text"
         class="form-control"
         placeholder="Search by code or title…"
       >
     </div>
-    <div class="col-md-6">
-      <label for="confSlider" class="form-label">
-        Min Confidence: <span id="confValue">0.00</span>
-      </label>
-      <input
-        type="range"
-        class="form-range"
-        id="confSlider"
-        min="0"
-        max="1"
-        step="0.01"
-        value="0"
-      >
+    <div class="col-md-6 d-flex justify-content-end">
+      <div class="w-50">
+        <label for="confSlider" class="form-label mb-1">
+          Min Confidence: <span id="confValue">0.00</span>
+        </label>
+        <input
+          id="confSlider"
+          type="range"
+          class="form-range"
+          min="0" max="1" step="0.01"
+          value="0"
+        >
+      </div>
     </div>
   </div>
 
