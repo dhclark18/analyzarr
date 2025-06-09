@@ -11,17 +11,12 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
       rel="stylesheet">
     <style>
-      /* Define a CSS variable that changes per theme */
-      body.dark-mode {
-        --accordion-body-bg: rgba(255,255,255,0.03);
+      /* Theme-aware accordion background via data-bs-theme */
+      html[data-bs-theme="dark"] .accordion .accordion-body {
+        background-color: rgba(255,255,255,0.03);
       }
-      body.light-mode {
-        --accordion-body-bg: rgba(0,0,0,0.05);
-      }
-    
-      /* Apply it to every accordion body */
-      .accordion .accordion-body {
-        background-color: var(--accordion-body-bg);
+      html[data-bs-theme="light"] .accordion .accordion-body {
+        background-color: rgba(0,0,0,0.05);
       }
     </style>
   </head>
