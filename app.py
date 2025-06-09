@@ -297,6 +297,7 @@ def override_episode():
 
     flash(f"Episode {key} overridden: confidence set to 1.0, tags updated.", "success")
     return redirect(request.referrer or url_for("index"))
+
 @app.route("/series/<int:series_id>/episode/<key>")
 def episode_details(series_id, key):
     # 1) Find the series title
@@ -363,8 +364,8 @@ def episode_details(series_id, key):
         norm_extracted=norm_extracted,
         substring_override=substring_override,
         missing_title=missing_title,
-        base_conf=0.8,    # if you want to display your “base_conf” constant
-        exp=1,            # if you want to show your exponent
+        base_conf=0.8,   
+        exp=1,            
         tag_list=tag_list
     )
     
