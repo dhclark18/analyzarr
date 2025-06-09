@@ -75,6 +75,29 @@
         font-size: 0.9rem;
         padding: 0.3rem 0.6rem;
       }
+      
+      /* ─── Fix accordion borders when collapsed ─────────────────────────── */
+      .accordion-item {
+        border: 1px solid var(--bs-border-color);
+        border-radius: .25rem;
+        overflow: hidden;            /* clip children to the rounded box */
+        margin-bottom: .5rem;        /* optional spacing between items */
+      }
+      
+      /* remove the default header border so we don’t double-stroke */
+      .accordion-button {
+        border: none;
+      }
+      
+      /* when collapsed, draw the bottom edge on the header */
+      .accordion-button.collapsed {
+        border-bottom: 1px solid var(--bs-border-color);
+      }
+      
+      /* the inner collapse panel shouldn’t re-draw a top border */
+      .accordion-collapse {
+        border-top: none;
+      }
       /* Add some vertical gap between each season panel */
       .accordion-item {
         margin-bottom: 1rem;
