@@ -48,7 +48,8 @@
       {% set avg_conf = (eps|sum(attribute='confidence')/total)|round(2) %}
     
       <div class="accordion-item">
-        <h2 class="accordion-header" id="headingSeason{{season}}">
+        <h2 class="accordion-header d-flex justify-content-between align-items-center" id="headingSeason{{season}}">
+          {# ── Collapse toggle ── #}
           <button
             class="accordion-button {% if not loop.first %}collapsed{% endif %}"
             type="button"
@@ -60,6 +61,24 @@
             Season {{season}} • Episodes: {{total}} •
             ✅ {{matched}} • ❌ {{mis}} • ✱ {{overr}} • Avg Conf: {{avg_conf}}
           </button>
+        
+          {# ── Bulk action buttons ── #}
+          <div class="btn-group me-3">
+            <button
+              class="btn btn-success btn-sm bulk-override-season"
+              data-season="{{season}}"
+              title="Bulk Override"
+            >
+              <i class="bi bi-shield-check"></i>
+            </button>
+            <button
+              class="btn btn-warning btn-sm bulk-autofix-season"
+              data-season="{{season}}"
+              title="Bulk Auto-Fix"
+            >
+              <i class="bi bi-tools"></i>
+            </button>
+          </div>
         </h2>
         <div
           id="collapseSeason{{season}}"
