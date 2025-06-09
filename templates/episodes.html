@@ -51,14 +51,14 @@
         <h2 class="accordion-header" id="headingSeason{{season}}">
           <button
             class="accordion-button {% if not loop.first %}collapsed{% endif %}"
-            …
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapseSeason{{season}}"
+            aria-expanded="{{ 'true' if loop.first else 'false' }}"
+            aria-controls="collapseSeason{{season}}"
           >
-            Season {{season}} •
-            Episodes: {{total}} •
-            ✅ {{matched}} •
-            ❌ {{mis}} •
-            ✱ {{overr}} •
-            Avg Conf: {{avg_conf}}
+            Season {{season}} • Episodes: {{total}} •
+            ✅ {{matched}} • ❌ {{mis}} • ✱ {{overr}} • Avg Conf: {{avg_conf}}
           </button>
         </h2>
         <div
