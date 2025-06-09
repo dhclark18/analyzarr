@@ -32,10 +32,10 @@
   <div class="accordion" id="seasonsAccordion">
     {% for season, eps in seasons.items() %}
       {# compute stats #}
-      {% set total = eps|length %}
-      {% set matched = eps|selectattr('tags','match','(^|,)matched(,|$)')|list|length %}
-      {% set mis     = eps|selectattr('tags','match','(^|,)problematic-episode(,|$)')|list|length %}
-      {% set overr   = eps|selectattr('tags','match','(^|,)override(,|$)')|list|length %}
+      {% set total    = eps|length %}
+      {% set matched  = eps|selectattr('tags','match','(^|,)matched(,|$)')|list|length %}
+      {% set mis      = eps|selectattr('tags','match','(^|,)problematic-episode(,|$)')|list|length %}
+      {% set overr    = eps|selectattr('tags','match','(^|,)override(,|$)')|list|length %}
       {% set avg_conf = (eps|sum(attribute='confidence')/total)|round(2) %}
 
       <div class="accordion-item">
@@ -55,8 +55,8 @@
             ✅ {{matched}} • ❌ {{mis}} • ✱ {{overr}} • Avg Conf: {{avg_conf}}
           </button>
 
-          {# ── Header-Level Bulk Actions ── #}
-          <div class="btn-group me-3">
+          {# ── Header-Level Bulk Actions (now vertically centered) ── #}
+          <div class="btn-group align-items-center me-3">
             <button
               class="btn btn-success btn-sm bulk-override-season"
               data-season="{{season}}"
@@ -96,7 +96,7 @@
                 <tbody>
                   {% for ep in eps %}
                     {% set tag_list = ep.tags.split(',') if ep.tags else [] %}
-                    <tr data-tags="{{ ep.tags }}" data-sonarr-id="{{ ep.sonarr_id or '' }}">
+                    <tr data-tags="{{ ep.tags }}" data-sonarr-id="{{ ep.sonarr_id or '' }}" data-key="{{ ep.key }}">
                       <td class="text-center">
                         {% if 'matched' in tag_list %}
                           <i class="bi bi-check-circle-fill text-success"></i>
@@ -156,123 +156,6 @@
 
 {% block scripts %}
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-  // Auto-Fix spinner only
-  document.querySelectorAll(".auto-fix-btn").forEach(btn => {
-    btn.addEventListener("click", async ev => {
-      ev.preventDefault();
-      const seriesId  = btn.dataset.seriesId;
-      const episodeId = btn.dataset.episodeId;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-      try {
-        const resp = await fetch(
-          `/series/${seriesId}/episode/auto-fix`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ episode_id: episodeId })
-          }
-        );
-        const data = await resp.json();
-        if (!resp.ok || data.status !== "success") {
-          throw new Error(data.message || "Auto-Fix failed");
-        }
-        btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> Done';
-        setTimeout(() => location.reload(), 1000);
-      } catch(err) {
-        console.error(err);
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-tools"></i> Auto-Fix';
-        alert("Auto-Fix error: " + err.message);
-      }
-    });
-  });
-
-  // Season-level Bulk Override
-  document.querySelectorAll(".bulk-override-season").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const season = btn.dataset.season;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-      const panelRows = document
-        .getElementById(`collapseSeason${season}`)
-        .querySelectorAll("tbody tr");
-      for (let row of panelRows) {
-        const tags = row.dataset.tags.split(",");
-        if (!tags.includes("problematic-episode")) continue;
-        await fetch("/override", {
-          method: "POST",
-          body: new URLSearchParams({ key: row.dataset.key })
-        });
-      }
-      location.reload();
-    });
-  });
-
-  // Season-level Bulk Auto-Fix
-  document.querySelectorAll(".bulk-autofix-season").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const season = btn.dataset.season;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-      const panelRows = document
-        .getElementById(`collapseSeason${season}`)
-        .querySelectorAll("tbody tr");
-      for (let row of panelRows) {
-        const tags     = row.dataset.tags.split(",");
-        const episodeId = row.dataset.sonarrId;
-        if (!tags.includes("problematic-episode") || !episodeId) continue;
-        await fetch(`/series/${series_id}/episode/auto-fix`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ episode_id: episodeId })
-        });
-      }
-      location.reload();
-    });
-  });
-
-  // Status Tabs Filtering
-  document.querySelectorAll('#filterTabs .nav-link').forEach(tab => {
-    tab.addEventListener('click', ev => {
-      ev.preventDefault();
-      document.querySelectorAll('#filterTabs .nav-link')
-        .forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      const filter = tab.dataset.filter;
-      document.querySelectorAll('tbody tr').forEach(row => {
-        const tags = row.dataset.tags.split(',');
-        row.style.display =
-          filter === 'all' || tags.includes(filter) ? '' : 'none';
-      });
-    });
-  });
-
-  // Search & Confidence Slider Filtering
-  const searchInput = document.getElementById('searchInput');
-  const confSlider  = document.getElementById('confSlider');
-  const confValue   = document.getElementById('confValue');
-
-  function applyFilters() {
-    const q    = searchInput.value.toLowerCase();
-    const minC = parseFloat(confSlider.value);
-    document.querySelectorAll('tbody tr').forEach(row => {
-      const cells = row.cells;
-      const code  = cells[1].textContent.toLowerCase();
-      const exp   = cells[2].textContent.toLowerCase();
-      const act   = cells[3].textContent.toLowerCase();
-      const conf  = parseFloat(cells[4].textContent) || 0;
-      const textMatch = code.includes(q) || exp.includes(q) || act.includes(q);
-      row.style.display = (textMatch && conf >= minC) ? '' : 'none';
-    });
-  }
-
-  searchInput.addEventListener('input', applyFilters);
-  confSlider.addEventListener('input', () => {
-    confValue.textContent = parseFloat(confSlider.value).toFixed(2);
-    applyFilters();
-  });
-});
+// …your existing JavaScript…
 </script>
 {% endblock %}
