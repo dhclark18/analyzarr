@@ -47,6 +47,17 @@ def fetch_series_from_sonarr():
     except Exception as e:
         app.logger.error("❌ Sonarr API error fetching series: %s", e)
         abort(500, description="Failed to fetch series from Sonarr")
+        
+# ─── Utilities ────────────────────────────────────────────────────────────────
+# define a regex-based test
+def regex_match(value, pattern):
+    """Return True if `pattern` (a string regex) matches `value`."""
+    if value is None:
+        return False
+    return re.search(pattern, value) is not None
+
+# register it under the name "match"
+app.jinja_env.tests['match'] = regex_match
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
