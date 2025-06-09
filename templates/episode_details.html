@@ -28,7 +28,7 @@
         <dt class="col-sm-3">Normalized Extracted</dt>
         <dd class="col-sm-9">{{ norm_extracted }}</dd>
 
-        <dt class="col-sm-3">Substring Override?</dt>
+        <dt class="col-sm-3">Extracted in Expected?</dt>
         <dd class="col-sm-9">
           {% if substring_override %}
             ✔️ ({{ norm_expected }} in {{ norm_extracted }})
@@ -46,7 +46,7 @@
           {% endif %}
         </dd>
 
-        <dt class="col-sm-3">Base Confidence</dt>
+        <dt class="col-sm-3">Starting Confidence</dt>
         <dd class="col-sm-9">{{ base_conf }}</dd>
 
         <dt class="col-sm-3">Exponent</dt>
