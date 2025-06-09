@@ -31,27 +31,33 @@
   {# ─── Accordion by Season with Inline Stats & Bulk Actions ───────────────── #}
   <div class="accordion" id="seasonsAccordion">
     {% for season, eps in seasons.items() %}
-      {% set total    = eps|length %}
-      {% set matched  = eps|selectattr('tags','search','matched')|list|length %}
-      {% set mis      = eps|selectattr('tags','search','problematic-episode')|list|length %}
-      {% set overr    = eps|selectattr('tags','search','override')|list|length %}
+      {# compute stats #}
+      {% set total = eps|length %}
+      {% set matched = eps 
+           | selectattr('tags','match','(^|,)matched(,|$)') 
+           | list 
+           | length %}
+      {% set mis = eps 
+           | selectattr('tags','match','(^|,)problematic-episode(,|$)') 
+           | list 
+           | length %}
+      {% set overr = eps 
+           | selectattr('tags','match','(^|,)override(,|$)') 
+           | list 
+           | length %}
       {% set avg_conf = (eps|sum(attribute='confidence')/total)|round(2) %}
-
+    
       <div class="accordion-item">
         <h2 class="accordion-header" id="headingSeason{{season}}">
           <button
             class="accordion-button {% if not loop.first %}collapsed{% endif %}"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#collapseSeason{{season}}"
-            aria-expanded="{{ 'true' if loop.first else 'false' }}"
-            aria-controls="collapseSeason{{season}}"
+            …
           >
-            Season {{season}} &bull;
-            Episodes: {{total}} &bull;
-            ✅ {{matched}} &bull;
-            ❌ {{mis}} &bull;
-            ✱ {{overr}} &bull;
+            Season {{season}} •
+            Episodes: {{total}} •
+            ✅ {{matched}} •
+            ❌ {{mis}} •
+            ✱ {{overr}} •
             Avg Conf: {{avg_conf}}
           </button>
         </h2>
