@@ -1,127 +1,68 @@
 {% extends "base.html" %}
-{% block title %}Episodes – {{ series_title }}{% endblock %}
-
+{% block title %}{{ series_title }} – Episodes{% endblock %}
 {% block content %}
-  <h1 class="mb-4">🎞️ Episodes in {{ series_title }}</h1>
+  <h1 class="mb-4">🎞️ {{ series_title }}</h1>
   <a href="{{ url_for('index') }}" class="btn btn-outline-light mb-3">← Back to series</a>
 
-  {# Status filter pills and search/slider remain unchanged… #}
-
-  {# ─── Season Sections with Dropdown Tables & Bulk Actions ───────────────── #}
-  {% for season, eps in seasons.items() %}
-    {% set total    = eps|length %}
-    {% set matched  = eps|selectattr('tags','match','(^|,)matched(,|$)')|list|length %}
-    {% set mis      = eps|selectattr('tags','match','(^|,)problematic-episode(,|$)')|list|length %}
-    {% set overr    = eps|selectattr('tags','match','(^|,)override(,|$)')|list|length %}
-    {% set avg_conf = (eps|sum(attribute='confidence')/total)|round(2) %}
-
-    <div class="mb-3">
-      <div class="d-flex align-items-center">
-        {# ── Dropdown for this Season ── #}
-        <div class="dropdown flex-grow-1">
+  <div class="accordion" id="seasonsAccordion">
+    {% for season_num, eps in seasons.items() %}
+      {# compute stats #}
+      {% set total   = eps|length %}
+      {% set matched = eps|selectattr('tags', 'match', '(^|,)matched(,|$)')|list|length %}
+      <div class="accordion-item season">
+        <h2 class="accordion-header" id="heading{{ season_num }}">
           <button
-            class="btn btn-secondary dropdown-toggle season-header-btn w-100 text-start"
+            class="accordion-button collapsed header"
             type="button"
-            id="dropdownSeason{{ season }}"
-            data-bs-toggle="dropdown"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapse{{ season_num }}"
             aria-expanded="false"
-          >
-            Season {{season}} • Episodes: {{total}} •
-            ✅ {{matched}} • ❌ {{mis}} • ✱ {{overr}} • Avg Conf: {{avg_conf}}
-          </button>
-          <div
-            class="dropdown-menu dropdown-menu-dark p-3 w-100"
-            aria-labelledby="dropdownSeason{{ season }}"
-          >
-            <div class="table-responsive">
-              <table class="table table-dark table-bordered align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>Code</th>
-                    <th>Expected Title</th>
-                    <th>Actual Title</th>
-                    <th>Confidence</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for ep in eps %}
-                    {% set tag_list = ep.tags.split(',') if ep.tags else [] %}
-                    <tr data-tags="{{ ep.tags }}" data-sonarr-id="{{ ep.sonarr_id or '' }}" data-key="{{ ep.key }}">
-                      <td class="text-center">
-                        {% if 'matched' in tag_list %}
-                          <i class="bi bi-check-circle-fill text-success"></i>
-                        {% elif 'problematic-episode' in tag_list %}
-                          <i class="bi bi-exclamation-circle-fill text-danger"></i>
-                        {% else %}
-                          <i class="bi bi-question-circle-fill text-secondary"></i>
-                        {% endif %}
-                      </td>
-                      <td>{{ ep.code }}</td>
-                      <td>
-                        <a href="{{ url_for('episode_details', series_id=series_id, key=ep.key) }}">
-                          {{ ep.expected_title }}
-                        </a>
-                      </td>
-                      <td>{{ ep.actual_title }}</td>
-                      <td>{{ ep.confidence }}{% if 'override' in tag_list %}*{% endif %}</td>
-                      <td>
-                        {% if 'problematic-episode' in tag_list %}
-                          <div class="btn-group" role="group">
-                            {% if ep.sonarr_id %}
-                              <button
-                                class="btn btn-warning btn-sm auto-fix-btn"
-                                data-series-id="{{ series_id }}"
-                                data-episode-id="{{ ep.sonarr_id }}"
-                                title="Auto-Fix via Sonarr"
-                              >
-                                <i class="bi bi-tools"></i>
-                              </button>
-                            {% else %}
-                              <button class="btn btn-warning btn-sm" disabled title="No Sonarr ID">
-                                <i class="bi bi-tools"></i>
-                              </button>
-                            {% endif %}
-                            <form method="POST"
-                                  action="{{ url_for('override_episode') }}"
-                                  class="m-0 p-0">
-                              <input type="hidden" name="key" value="{{ ep.key }}">
-                              <button type="submit" class="btn btn-success btn-sm" title="Override">
-                                <i class="bi bi-shield-check"></i>
-                              </button>
-                            </form>
-                          </div>
-                        {% endif %}
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+            aria-controls="collapse{{ season_num }}">
+            
+            <div class="season-info">
+              <span class="season-number">Season {{ season_num }}</span>
+              <span class="season-stats">{{ matched }} / {{ total }} matched</span>
             </div>
+
+            <div class="actions">
+              <a href="#" class="btn btn-outline-light btn-sm">Mark All</a>
+              <a href="#" class="btn btn-outline-light btn-sm">Unmark All</a>
+            </div>
+          </button>
+        </h2>
+        <div
+          id="collapse{{ season_num }}"
+          class="accordion-collapse collapse"
+          aria-labelledby="heading{{ season_num }}"
+          data-bs-parent="#seasonsAccordion">
+          <div class="accordion-body p-0">
+            <table class="table table-dark table-striped mb-0">
+              <thead>
+                <tr>
+                  <th>Ep</th>
+                  <th>Title</th>
+                  <th>Tags</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for ep in eps %}
+                  <tr>
+                    <td>S{{ "%02d"|format(season_num) }}E{{ "%02d"|format(ep.number) }}</td>
+                    <td>{{ ep.title }}</td>
+                    <td>{{ ep.tags|join(', ') }}</td>
+                    <td>
+                      <a href="#" class="btn btn-sm btn-outline-light">Override</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
         </div>
-
-        {# ── Bulk‐Action Buttons beside the dropdown ── #}
-        <div class="btn-group align-items-center ms-2">
-          <button
-            class="btn btn-success btn-sm bulk-override-season"
-            data-season="{{ season }}"
-            title="Bulk Override"
-          >
-            <i class="bi bi-shield-check"></i>
-          </button>
-          <button
-            class="btn btn-warning btn-sm bulk-autofix-season"
-            data-season="{{ season }}"
-            title="Bulk Auto-Fix"
-          >
-            <i class="bi bi-tools"></i>
-          </button>
-        </div>
       </div>
-    </div>
-  {% endfor %}
+    {% endfor %}
+  </div>
 {% endblock %}
 
 {% block scripts %}
