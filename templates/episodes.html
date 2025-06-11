@@ -5,29 +5,6 @@
   <h1 class="mb-4">🎞️ Episodes in {{ series_title }}</h1>
   <a href="{{ url_for('index') }}" class="btn btn-outline-light mb-3">← Back to series</a>
 
-  {# ─── Status Filter Pills ─────────────────────────────────────────── #}
-  <ul class="nav nav-pills mb-3" id="filterTabs">
-    <li class="nav-item"><a class="nav-link active" data-filter="all" href="#">All</a></li>
-    <li class="nav-item"><a class="nav-link" data-filter="matched" href="#">Matched</a></li>
-    <li class="nav-item"><a class="nav-link" data-filter="problematic-episode" href="#">Mismatched</a></li>
-    <li class="nav-item"><a class="nav-link" data-filter="override" href="#">Overridden</a></li>
-  </ul>
-
-  {# ─── Search + Confidence Slider ──────────────────────────────────── #}
-  <div class="row mb-4 align-items-center">
-    <div class="col-md-6">
-      <input id="searchInput" type="text" class="form-control" placeholder="Search by code or title…">
-    </div>
-    <div class="col-md-6 d-flex justify-content-end">
-      <div class="w-50">
-        <label for="confSlider" class="form-label mb-1">
-          Min Confidence: <span id="confValue">0.00</span>
-        </label>
-        <input id="confSlider" type="range" class="form-range" min="0" max="1" step="0.01" value="0">
-      </div>
-    </div>
-  </div>
-
   {# ─── Accordion by Season with Stats & Bulk Actions ───────────────── #}
   <div class="accordion" id="seasonsAccordion">
     {% for season, eps in seasons.items() %}
