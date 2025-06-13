@@ -1,13 +1,16 @@
 #!/usr/bin/env sh
 set -e
 
-# inject real Sonarr vars into the static env.js
+echo ">>> Injecting SONARR_URL=${SONARR_URL}"
 envsubst '${SONARR_URL} ${SONARR_API_KEY}' \
   < /usr/share/nginx/html/env.js \
   > /usr/share/nginx/html/env.js
 
-# kick off your existing scanner in the background
+echo ">>> env.js now reads:"
+cat /usr/share/nginx/html/env.js
+
+# background your watcher:
 python watcher.py &
 
-# start nginx in foreground
+# finally, run nginx
 exec nginx -g 'daemon off;'
