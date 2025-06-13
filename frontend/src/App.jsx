@@ -6,11 +6,11 @@ import {
   Card,
   Button,
   Spinner,
-  Alert
+  Alert,
+  Badge
 } from 'react-bootstrap';
-
 import './App.css';
-import { fetchSeries } from './api';
+import { fetchSeries, fetchMismatchCounts } from './api';
 
 export default function App() {
   const [series, setSeries]   = useState([]);
@@ -18,18 +18,30 @@ export default function App() {
   const [error, setError]     = useState(null);
 
   useEffect(() => {
-    fetchSeries()
-      .then(data => setSeries(data))
-      .catch(err  => setError(err.message))
+    Promise.all([ fetchSeries(), fetchMismatchCounts() ])
+      .then(([seriesData, mismatchData]) => {
+        const lookup = mismatchData.reduce((acc, { seriesTitle, count }) => {
+          acc[seriesTitle] = count;
+          return acc;
+        }, {});
+        setSeries(
+          seriesData.map(s => ({
+            ...s,
+            mismatchCount: lookup[s.title] || 0
+          }))
+        );
+      })
+      .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return (
     <Container className="app-container text-center">
-      <Spinner animation="border" role="status" style={{ color: 'var(--color-primary)' }} />
+      <Spinner animation="border"
+               style={{ color: 'var(--color-primary)' }}
+               role="status" />
     </Container>
   );
-
   if (error) return (
     <Container className="app-container">
       <Alert variant="danger">Error: {error}</Alert>
@@ -44,10 +56,16 @@ export default function App() {
           <Col key={s.id}>
             <Card className="h-100 custom-card">
               <Card.Body className="d-flex flex-column">
-                <Card.Title className="mb-2">{s.title}</Card.Title>
-                <Card.Text className="text-muted mb-4">
-                  {s.seasons.length} seasons
-                </Card.Text>
+                <Card.Title>{s.title}</Card.Title>
+                <div className="mb-3">
+                  <small className="text-muted me-3">
+                    {s.seasons.length} seasons
+                  </small>
+                  <Badge bg="danger">
+                    {s.mismatchCount} mismatch
+                    {s.mismatchCount === 1 ? '' : 'es'}
+                  </Badge>
+                </div>
                 <div className="mt-auto">
                   <Button className="btn-primary-custom me-2">
                     View Seasons
