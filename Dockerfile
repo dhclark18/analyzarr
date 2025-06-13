@@ -27,6 +27,7 @@ COPY *.py ./
 RUN apt-get update \
  && apt-get install -y --no-install-recommends nginx gettext \
  && rm -rf /var/lib/apt/lists/*
+RUN rm -f /etc/nginx/sites-enabled/default
 
 # 4) Copy nginx config (SPA routing)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
