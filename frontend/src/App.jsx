@@ -56,7 +56,7 @@ export default function App() {
           <Col key={s.id}>
             <Card className="h-100 custom-card">
               <Card.Body className="d-flex flex-column">
-                <Card.Title>{s.title}</Card.Title>
+                <Card.Title className="series-name">{s.title}</Card.Title>
                 <div className="mb-3">
                   <small className="text-muted me-3">
                     {s.seasons.length} seasons
