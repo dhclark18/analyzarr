@@ -31,7 +31,8 @@ RUN apt-get update \
 # 4) Copy nginx config (SPA routing)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# 5) Copy the built React app into nginx’s html root
+# 5) Remove default nginx files, then copy the React build
+RUN rm -rf /usr/share/nginx/html/*
 COPY --from=ui-builder /app/frontend/build/ /usr/share/nginx/html/
 
 # 6) Copy unified entrypoint (injects env, runs watcher, launches nginx)
