@@ -21,15 +21,15 @@ def compute_mismatch_counts():
     """
     conn = get_conn()
     cur  = conn.cursor()
-    cur.execute("""
-        SELECT
-          e.series_title   AS seriesTitle,
-          COUNT(DISTINCT e.key) AS count
-        FROM episodes e
-        JOIN episode_tags et
-          ON e.key = et.episode_key
-        GROUP BY e.series_title;
-    """)
+    cur.execute(
+        # quoted alias ensures correct key casing
+        'SELECT e.series_title AS "seriesTitle", '
+        'COUNT(DISTINCT e.key)        AS count '
+        'FROM episodes e '
+        'JOIN episode_tags et '
+        '  ON e.key = et.episode_key '
+        'GROUP BY e.series_title;'
+    )
     rows = cur.fetchall()
     cur.close()
     conn.close()
