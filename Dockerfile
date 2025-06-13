@@ -32,7 +32,7 @@ RUN apt-get update \
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # 5) Copy the built React app into nginx’s html root
-COPY --from=ui-builder /app/frontend/build /usr/share/nginx/html
+COPY --from=ui-builder /app/frontend/build/ /usr/share/nginx/html/
 
 # 6) Copy unified entrypoint (injects env, runs watcher, launches nginx)
 COPY entrypoint.sh /entrypoint.sh
