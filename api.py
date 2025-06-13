@@ -20,19 +20,20 @@ def compute_mismatch_counts():
     by counting episodes tagged specifically with 'problematic-episode'.
     """
     conn = get_conn()
-    cur  = conn.cursor()
+    cur = conn.cursor()
     cur.execute(
-        # only consider tags named 'problematic-episode'
-        'SELECT
-           e.series_title   AS "seriesTitle",
-           COUNT(DISTINCT e.key) AS count
-         FROM episodes e
-         JOIN episode_tags et
-           ON e.key = et.episode_key
-         JOIN tags t
-           ON et.tag_id = t.id
-          AND t.name = %s
-         GROUP BY e.series_title;',
+        """
+        SELECT
+          e.series_title   AS "seriesTitle",
+          COUNT(DISTINCT e.key) AS count
+        FROM episodes e
+        JOIN episode_tags et
+          ON e.key = et.episode_key
+        JOIN tags t
+          ON et.tag_id = t.id
+         AND t.name = %s
+        GROUP BY e.series_title;
+        """,
         ('problematic-episode',)
     )
     rows = cur.fetchall()
@@ -48,5 +49,5 @@ def mismatches():
     return jsonify(compute_mismatch_counts())
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5001)
-
+    # serve on all interfaces on port 5001
+    app.run(host='0.0.0.0', port=5001)
