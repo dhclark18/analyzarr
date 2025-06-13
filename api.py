@@ -17,18 +17,23 @@ def get_conn():
 def compute_mismatch_counts():
     """
     Returns a list of { seriesTitle: str, count: int }
-    by grouping all tagged episodes by their series_title.
+    by counting episodes tagged specifically with 'problematic-episode'.
     """
     conn = get_conn()
     cur  = conn.cursor()
     cur.execute(
-        # quoted alias ensures correct key casing
-        'SELECT e.series_title AS "seriesTitle", '
-        'COUNT(DISTINCT e.key)        AS count '
-        'FROM episodes e '
-        'JOIN episode_tags et '
-        '  ON e.key = et.episode_key '
-        'GROUP BY e.series_title;'
+        # only consider tags named 'problematic-episode'
+        'SELECT
+           e.series_title   AS "seriesTitle",
+           COUNT(DISTINCT e.key) AS count
+         FROM episodes e
+         JOIN episode_tags et
+           ON e.key = et.episode_key
+         JOIN tags t
+           ON et.tag_id = t.id
+          AND t.name = %s
+         GROUP BY e.series_title;',
+        ('problematic-episode',)
     )
     rows = cur.fetchall()
     cur.close()
@@ -43,5 +48,5 @@ def mismatches():
     return jsonify(compute_mismatch_counts())
 
 if __name__ == '__main__':
-    # serve on 127.0.0.1:5001 so nginx can proxy it
     app.run(host='127.0.0.1', port=5001)
+
