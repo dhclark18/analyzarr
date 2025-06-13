@@ -3,8 +3,8 @@ FROM node:18-alpine AS ui-builder
 WORKDIR /app/frontend
 
 # Install JS deps
-COPY frontend/package*.json ./
-RUN npm ci
+COPY frontend/package.json ./
+RUN npm install
 
 # Build the production bundle
 COPY frontend/ ./
