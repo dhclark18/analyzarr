@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -e
 
-# 1) inject real Sonarr vars into a temp file, then overwrite env.js
+# inject real Sonarr vars into a temp file, then overwrite env.js
 envsubst '${SONARR_URL} ${SONARR_API_KEY}' \
   < /usr/share/nginx/html/env.js \
   > /usr/share/nginx/html/env.tmp.js \
@@ -10,8 +10,11 @@ envsubst '${SONARR_URL} ${SONARR_API_KEY}' \
 echo ">>> env.js now reads:"
 cat /usr/share/nginx/html/env.js
 
-# 2) start watcher in background
+# start the API
+python3 /app/api.py &
+
+# start watcher in background
 python3 watcher.py &
 
-# 3) run nginx in foreground
+# run nginx in foreground
 exec nginx -g 'daemon off;'
