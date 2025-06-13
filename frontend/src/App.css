@@ -62,6 +62,10 @@ body {
   color: var(--color-text);
 }
 
+.series-name {
+  color: var(--color-text) !important;  /* #e0e0e0 by default */
+}
+
 /* Fallback for links/buttons where you still need white outline */
 .btn-outline-light {
   color: var(--color-text);
