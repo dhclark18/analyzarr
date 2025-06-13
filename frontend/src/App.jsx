@@ -37,11 +37,14 @@ export default function App() {
 
   if (loading) return (
     <Container className="app-container text-center">
-      <Spinner animation="border"
-               style={{ color: 'var(--color-primary)' }}
-               role="status" />
+      <Spinner
+        animation="border"
+        role="status"
+        style={{ color: 'var(--color-primary)' }}
+      />
     </Container>
   );
+
   if (error) return (
     <Container className="app-container">
       <Alert variant="danger">Error: {error}</Alert>
@@ -56,14 +59,16 @@ export default function App() {
           <Col key={s.id}>
             <Card className="h-100 custom-card">
               <Card.Body className="d-flex flex-column">
-                <Card.Title className="series-name">{s.title}</Card.Title>
+                <Card.Title className="series-name">
+                  {s.title}
+                </Card.Title>
                 <div className="mb-3">
-                  <small className="text-muted me-3">
+                  <small className="seasons-text me-3">
                     {s.seasons.length} seasons
                   </small>
                   <Badge bg="danger">
                     {s.mismatchCount} mismatch
-                    {s.mismatchCount === 1 ? '' : 'es'}
+                    {s.mismatchCount !== 1 && 'es'}
                   </Badge>
                 </div>
                 <div className="mt-auto">
