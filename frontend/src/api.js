@@ -7,3 +7,9 @@ export async function fetchSeries() {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
+
+export async function fetchMismatchCounts() {
+  const res = await fetch('/api/mismatches');
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();  // [ { seriesTitle, count }, … ]
+}
