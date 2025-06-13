@@ -10,4 +10,4 @@ envsubst '${SONARR_URL} ${SONARR_API_KEY}' \
 exec nginx -g 'daemon off;'
 
 # kick off your existing scanner in the background
-python watcher.py &
+python watcher.py
