@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Container, Table, Spinner, Alert, Button } from 'react-bootstrap';
 
 export default function SeriesDetail() {
-  const { seriesId } = useParams();
+  const { seriesTitle } = useParams();
   const [episodes, setEpisodes] = useState(null);
   const [error, setError] = useState(null);
 
@@ -12,7 +12,7 @@ export default function SeriesDetail() {
       .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
       .then(setEpisodes)
       .catch(err => setError(err));
-  }, [seriesId]);
+  }, [seriesTitle]);
 
   if (!episodes) return (
     <Container className="py-4 text-center">
