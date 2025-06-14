@@ -72,7 +72,7 @@ export default function App() {
                   <div className="mt-auto">
                     <Button
                       as={Link}
-                      to={`/series/${s.id}`}
+                      to={`/series/${encodeURIComponent(s.title)}`}
                       className="btn-primary-custom me-2"
                     >
                       View Seasons
