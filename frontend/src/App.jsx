@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Row, Col, Card, Button, Spinner, Alert, Badge } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Spinner, Alert, Badge } from 'react-bootstrap';
 import './App.css';
 import { fetchSeries, fetchMismatchCounts } from './api';
 import Layout from './components/Layout';
@@ -45,7 +45,7 @@ export default function App() {
 
   return (
     <Layout>
-      <div className="app-container">
+      <Container fluid className="app-container">
         <h1 className="page-title">My Sonarr Library</h1>
         <Row xs={1} sm={2} md={3} lg={4} className="g-3">
           {series.map(s => (
@@ -76,7 +76,8 @@ export default function App() {
             </Col>
           ))}
         </Row>
-      </div>
+      </Container>
     </Layout>
   );
 }
+
