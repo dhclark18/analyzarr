@@ -67,9 +67,9 @@ def series_episodes(series_id):
           e.confidence AS confidence,
           e.key        AS key
         FROM episodes e
-        WHERE e.series_id = %s
+        WHERE e.series_title = %s
         ORDER BY e.key;
-    """, (series_id,))
+    """, (series_title,))
     rows = cur.fetchall()
     cur.close()
     conn.close()
