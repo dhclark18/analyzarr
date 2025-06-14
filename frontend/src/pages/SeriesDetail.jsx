@@ -1,83 +1,59 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, Button, Spinner, Alert, Badge } from 'react-bootstrap';
-import './App.css';
-import { fetchSeries, fetchMismatchCounts } from './api';
-import Layout from './components/Layout';
-import { useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
+import { Container, Table, Spinner, Alert, Button } from 'react-bootstrap';
 
-export default function App() {
-  const [series, setSeries]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+export default function SeriesDetail() {
+  const { seriesId } = useParams();
+  const [episodes, setEpisodes] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    Promise.all([ fetchSeries(), fetchMismatchCounts() ])
-      .then(([seriesData, mismatchData]) => {
-        const lookup = mismatchData.reduce((acc, { seriesTitle, count }) => {
-          acc[seriesTitle] = count;
-          return acc;
-        }, {});
-        setSeries(
-          seriesData.map(s => ({
-            ...s,
-            mismatchCount: lookup[s.title] || 0
-          }))
-        );
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+    fetch(`/api/series/${seriesId}/episodes`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
+      .then(setEpisodes)
+      .catch(err => setError(err));
+  }, [seriesId]);
 
-  if (loading) return (
-    <Container className="app-container text-center">
-      <Spinner
-        animation="border"
-        role="status"
-        style={{ color: 'var(--color-primary)' }}
-      />
+  if (!episodes) return (
+    <Container className="py-4 text-center">
+      <Spinner animation="border" role="status" />
     </Container>
   );
-
   if (error) return (
-    <Container className="app-container">
+    <Container className="py-4">
       <Alert variant="danger">Error: {error}</Alert>
+      <Button as={Link} to="/">← Back</Button>
     </Container>
   );
 
   return (
-    <Layout>
-      <Container fluid className="app-container">
-        <h1 className="page-title">My Sonarr Library</h1>
-        <Row xs={1} sm={2} md={3} lg={4} className="g-3">
-          {series.map(s => (
-            <Col key={s.id}>
-              <Card className="h-100 custom-card">
-                <Card.Body className="d-flex flex-column">
-                  <Card.Title className="series-name">
-                    {s.title}
-                  </Card.Title>
-                  <div className="mb-3">
-                    <small className="seasons-text me-3">
-                      {s.seasons.length} seasons
-                    </small>
-                    <Badge bg={s.mismatchCount === 0 ? 'success' : 'danger'}>
-                      {s.mismatchCount} mismatch{s.mismatchCount !== 1 && 'es'}
-                    </Badge>
-                  </div>
-                  <div className="mt-auto">
-                    <Button className="btn-primary-custom me-2">
-                      View Seasons
-                    </Button>
-                    <Button className="btn-accent">
-                      Refresh
-                    </Button>
-                  </div>
-                </Card.Body>
-              </Card>
-            </Col>
+    <Container fluid className="py-4">
+      <Button as={Link} to="/" variant="outline-light" className="mb-3">
+        ← Back
+      </Button>
+      <Table striped hover responsive variant="dark">
+        <thead>
+          <tr>
+            <th>Match?</th>
+            <th>Code</th>
+            <th>Expected Title</th>
+            <th>Actual Title</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {episodes.map(ep => (
+            <tr key={ep.key}>
+              <td>{ep.matches ? '✅' : '❌'}</td>
+              <td>{ep.code}</td>
+              <td>{ep.expectedTitle}</td>
+              <td>{ep.actualTitle}</td>
+              <td>{ep.confidence}</td>
+            </tr>
           ))}
-        </Row>
-      </Container>
-    </Layout>
+        </tbody>
+      </Table>
+    </Container>
   );
 }
+
