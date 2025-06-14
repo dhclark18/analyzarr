@@ -48,8 +48,8 @@ def compute_mismatch_counts():
 def mismatches():
     return jsonify(compute_mismatch_counts())
 
-@app.route('/api/series/<int:series_id>/episodes')
-def series_episodes(series_id):
+@app.route('/api/series/<series_title>/episodes')
+def series_episodes(series_title):
     conn = get_conn()
     cur  = conn.cursor()
     cur.execute("""
