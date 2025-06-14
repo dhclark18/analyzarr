@@ -11,6 +11,16 @@
   --color-accent:        #00bcd4;
   --color-accent-dark:   #008ba3;
   --color-accent-light:  #33dfff;
+  
+  /* Sidebar */
+  --color-sidebar-bg:    #1b1c2c;  /* very dark slate */
+  --color-sidebar-text:  #b0b0c3;  /* soft light gray */
+  --color-sidebar-hover: #27293d;  /* your surface color */
+
+  /* Navbar */
+  --color-navbar-bg:     #232530;  /* deep charcoal */
+  --color-navbar-text:   #e0e0e0;  /* primary text color */
+  --color-navbar-brand:  #f18025;  /* Sonarr‐orange accent */
 
   --color-border: #3a3a4f;
 }
