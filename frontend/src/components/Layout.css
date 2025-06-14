@@ -1,4 +1,24 @@
-/* sidebar styling */
 .sidebar {
-  border-right: 1px solid var(--color-border);
+  background-color: var(--color-sidebar-bg);
+}
+
+.sidebar .nav-link {
+  color: var(--color-sidebar-text);
+}
+
+.sidebar .nav-link:hover {
+  background-color: var(--color-sidebar-hover);
+  color: var(--color-text);
+}
+
+.navbar {
+  background-color: var(--color-navbar-bg) !important;
+}
+
+.navbar .navbar-brand {
+  color: var(--color-navbar-brand) !important;
+}
+
+.navbar .navbar-brand:hover {
+  color: var(--color-primary-light) !important;  /* lighter orange on hover */
 }
