@@ -48,6 +48,33 @@ def compute_mismatch_counts():
 def mismatches():
     return jsonify(compute_mismatch_counts())
 
+@app.route('/api/series/<int:series_id>/episodes')
+def series_episodes(series_id):
+    conn = get_conn()
+    cur  = conn.cursor()
+    cur.execute("""
+        SELECT
+          -- boolean: true if *no* problematic-episode tag
+          NOT EXISTS (
+            SELECT 1 FROM episode_tags et
+            JOIN tags t ON et.tag_id = t.id
+            WHERE et.episode_key = e.key
+              AND t.name = 'problematic-episode'
+          )             AS matches,
+          e.code       AS code,
+          e.expected_title AS expectedTitle,
+          e.actual_title   AS actualTitle,
+          e.confidence AS confidence,
+          e.key        AS key
+        FROM episodes e
+        WHERE e.series_id = %s
+        ORDER BY e.key;
+    """, (series_id,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify(rows)
+
 if __name__ == '__main__':
     # serve on all interfaces on port 5001
     app.run(host='0.0.0.0', port=5001)
