@@ -62,8 +62,8 @@ def series_episodes(series_title):
               AND t.name = 'problematic-episode'
           )             AS matches,
           e.code       AS code,
-          e.expected_title AS expectedTitle,
-          e.actual_title   AS actualTitle,
+          e.expected_title AS "expectedTitle",
+          e.actual_title   AS "actualTitle",
           e.confidence AS confidence,
           e.key        AS key
         FROM episodes e
