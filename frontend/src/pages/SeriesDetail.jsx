@@ -8,7 +8,7 @@ export default function SeriesDetail() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch(`/api/series/${seriesId}/episodes`)
+    fetch(`/api/series/${encodeURIComponent(seriesTitle)}/episodes`)
       .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
       .then(setEpisodes)
       .catch(err => setError(err));
