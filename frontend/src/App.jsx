@@ -3,6 +3,7 @@ import { Container, Row, Col, Card, Button, Spinner, Alert, Badge } from 'react-
 import './App.css';
 import { fetchSeries, fetchMismatchCounts } from './api';
 import Layout from './components/Layout';
+import { useNavigate } from 'react-router-dom';
 
 export default function App() {
   const [series, setSeries]   = useState([]);
