@@ -66,7 +66,9 @@ export default function App() {
                   <small className="seasons-text me-3">
                     {s.seasons.length} seasons
                   </small>
-                  <Badge bg="danger">
+                  <Badge
+                    bg={s.mismatchCount === 0 ? 'success' : 'danger'}
+                  >
                     {s.mismatchCount} mismatch
                     {s.mismatchCount !== 1 && 'es'}
                   </Badge>
@@ -87,4 +89,3 @@ export default function App() {
     </Container>
   );
 }
-
