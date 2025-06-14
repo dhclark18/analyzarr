@@ -1,9 +1,10 @@
+// src/App.jsx
 import React, { useEffect, useState } from 'react';
 import { Container, Row, Col, Card, Button, Spinner, Alert, Badge } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import './App.css';
 import { fetchSeries, fetchMismatchCounts } from './api';
 import Layout from './components/Layout';
-import { useNavigate } from 'react-router-dom';
 
 export default function App() {
   const [series, setSeries]   = useState([]);
@@ -17,6 +18,7 @@ export default function App() {
           acc[seriesTitle] = count;
           return acc;
         }, {});
+
         setSeries(
           seriesData.map(s => ({
             ...s,
@@ -28,21 +30,25 @@ export default function App() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return (
-    <Container className="app-container text-center">
-      <Spinner
-        animation="border"
-        role="status"
-        style={{ color: 'var(--color-primary)' }}
-      />
-    </Container>
-  );
+  if (loading) {
+    return (
+      <Container className="app-container text-center">
+        <Spinner
+          animation="border"
+          role="status"
+          style={{ color: 'var(--color-primary)' }}
+        />
+      </Container>
+    );
+  }
 
-  if (error) return (
-    <Container className="app-container">
-      <Alert variant="danger">Error: {error}</Alert>
-    </Container>
-  );
+  if (error) {
+    return (
+      <Container className="app-container">
+        <Alert variant="danger">Error: {error}</Alert>
+      </Container>
+    );
+  }
 
   return (
     <Layout>
@@ -53,22 +59,28 @@ export default function App() {
             <Col key={s.id}>
               <Card className="h-100 custom-card">
                 <Card.Body className="d-flex flex-column">
-                  <Card.Title className="series-name">
-                    {s.title}
-                  </Card.Title>
+                  <Card.Title className="series-name">{s.title}</Card.Title>
                   <div className="mb-3">
                     <small className="seasons-text me-3">
                       {s.seasons.length} seasons
                     </small>
                     <Badge bg={s.mismatchCount === 0 ? 'success' : 'danger'}>
-                      {s.mismatchCount} mismatch{s.mismatchCount !== 1 && 'es'}
+                      {s.mismatchCount} mismatch
+                      {s.mismatchCount !== 1 && 'es'}
                     </Badge>
                   </div>
                   <div className="mt-auto">
-                    <Button className="btn-primary-custom me-2">
+                    <Button
+                      as={Link}
+                      to={`/series/${s.id}`}
+                      className="btn-primary-custom me-2"
+                    >
                       View Seasons
                     </Button>
-                    <Button className="btn-accent">
+                    <Button
+                      className="btn-accent"
+                      onClick={() => window.location.reload()}
+                    >
                       Refresh
                     </Button>
                   </div>
