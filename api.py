@@ -66,6 +66,8 @@ def series_episodes(series_title):
           e.expected_title AS "expectedTitle",
           e.actual_title   AS "actualTitle",
           e.confidence AS confidence,
+          e.series_id AS seriesId,
+          e.episode_id AS episodeId,
           e.key        AS key
         FROM episodes e
         WHERE e.series_title = %s
