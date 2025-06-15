@@ -85,3 +85,9 @@ body {
   color: var(--color-text);
   border-color: var(--color-text-2);
 }
+
+.series-wrapper {
+  max-height: calc(100vh - 56px - 2rem);
+  overflow-y: auto;
+  padding-right: 1rem;
+}
