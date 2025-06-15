@@ -46,7 +46,7 @@ export default function SeriesDetail() {
     .then(() => window.location.reload())
     .catch(err => {
       console.error(err);
-      setReplacing(prev => ({ ...prev, [episodeId]: false }));
+      setReplacing(prev => ({ ...prev, [key]: false }));
     });
   };
 
@@ -104,14 +104,16 @@ export default function SeriesDetail() {
                         <td>{ep.actualTitle}</td>
                         <td>{ep.confidence}</td>
                         <td>
-                          <Button
-                            variant="warning"
-                            size="sm"
-                            disabled={replacing[ep.key]}
-                            onClick={() => replaceEpisode(ep.key)}
-                          >
-                            {replacing[ep.key] ? 'Replacing…' : 'Replace'}
-                          </Button>
+                          {!ep.matches && (
+                            <Button
+                              variant="warning"
+                              size="sm"
+                              disabled={replacing[ep.key]}
+                              onClick={() => replaceEpisode(ep.key)}
+                            >
+                              {replacing[ep.key] ? 'Replacing…' : 'Replace'}
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}
