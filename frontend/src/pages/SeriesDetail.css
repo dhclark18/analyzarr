@@ -1,0 +1,6 @@
+.table-wrapper {
+  /* full viewport height minus navbar (56px) and top padding (2rem = 32px) */
+  max-height: calc(100vh - 56px - 2rem);
+  overflow-y: auto;
+  padding-right: 1rem;    /* avoid cutting off scrollbar */
+}
