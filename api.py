@@ -62,6 +62,7 @@ def series_episodes(series_title):
               AND t.name = 'problematic-episode'
           )             AS matches,
           e.code       AS code,
+          CAST(SUBSTRING(e.code FROM '^S([0-9]{2})') AS INT) AS season,
           e.expected_title AS "expectedTitle",
           e.actual_title   AS "actualTitle",
           e.confidence AS confidence,
