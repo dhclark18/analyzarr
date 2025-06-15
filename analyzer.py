@@ -99,7 +99,9 @@ def init_db(conn):
           norm_expected      TEXT    NOT NULL DEFAULT '',
           norm_extracted     TEXT    NOT NULL DEFAULT '',
           substring_override BOOLEAN NOT NULL DEFAULT FALSE,
-          missing_title      BOOLEAN NOT NULL DEFAULT FALSE   
+          missing_title      BOOLEAN NOT NULL DEFAULT FALSE,
+          series_id          INTEGER NOT NULL,   
+          episode_id         INTEGER NOT NULL
         );
     """)
 
@@ -200,7 +202,9 @@ def insert_episode(
     norm_expected: str,
     norm_extracted: str,
     substring_override: bool,
-    missing_title: bool
+    missing_title: bool,
+    series_id: int,
+    episode_id: int
 ):
     with conn.cursor() as cur:
         cur.execute("""
@@ -214,12 +218,14 @@ def insert_episode(
                 norm_expected,
                 norm_extracted,
                 substring_override,
-                missing_title
+                missing_title,
+                series_id,
+                episode_id
             )
             VALUES (
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s
+                %s, %s, %s
             )
             ON CONFLICT (key) DO UPDATE
             SET
@@ -228,7 +234,9 @@ def insert_episode(
                 norm_expected      = EXCLUDED.norm_expected,
                 norm_extracted     = EXCLUDED.norm_extracted,
                 substring_override = EXCLUDED.substring_override,
-                missing_title      = EXCLUDED.missing_title;
+                missing_title      = EXCLUDED.missing_title,
+                series_id          = EXCLUDED.series_id,
+                episode_id         = EXCLUDED.episode_id;
         """, (
             key,
             series_title,
@@ -239,7 +247,9 @@ def insert_episode(
             norm_expected,
             norm_extracted,
             substring_override,
-            missing_title
+            missing_title,
+            series_id,
+            episode_id
         ))
     conn.commit()
 
@@ -639,7 +649,7 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     confidence = compute_confidence(expected_title, scene)
     
     insert_episode(
-        key, nice, code, expected_title, scene, confidence, norm_expected, norm_extracted, substring_override, missing_title
+        key, nice, code, expected_title, scene, confidence, norm_expected, norm_extracted, substring_override, missing_title, series["id"], ep["id"]
     )
 
     # On match: check for and add matched tag
