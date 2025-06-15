@@ -8,7 +8,7 @@ from flask import Flask, jsonify
 from flask import request, jsonify
 import os
 from analyzer import grab_best_nzb
-from sonarr_client import SonarrClient  # adjust the import path
+from analyzer import SonarrClient  # adjust the import path
 
 # initialize Sonarr client once
 sonarr = SonarrClient(
