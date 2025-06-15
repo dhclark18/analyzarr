@@ -17,7 +17,6 @@ export default function App() {
           acc[seriesTitle] = count;
           return acc;
         }, {});
-
         setSeries(
           seriesData.map(s => ({
             ...s,
@@ -97,4 +96,3 @@ export default function App() {
     </Layout>
   );
 }
-
