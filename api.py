@@ -9,7 +9,10 @@ from flask import request, jsonify
 import os
 from analyzer import grab_best_nzb, SonarrClient
 
-# initialize Sonarr client once
+# ─── create the Flask app first ───────────────────────────────────────────
+app = Flask(__name__)
+
+# ─── initialize a single Sonarr client ──────────────────────────────────
 sonarr = SonarrClient(
     base_url=os.getenv("SONARR_URL"),
     api_key=os.getenv("SONARR_API_KEY"),
@@ -33,14 +36,6 @@ def replace_episode():
         return jsonify({ "status": "ok" }), 200
     except Exception as e:
         return jsonify({ "error": str(e) }), 500
-
-app = Flask(__name__)
-
-def get_conn():
-    return psycopg2.connect(
-        os.environ['DATABASE_URL'],
-        cursor_factory=RealDictCursor
-    )
 
 def compute_mismatch_counts():
     """
@@ -105,7 +100,13 @@ def series_episodes(series_title):
     cur.close()
     conn.close()
     return jsonify(rows)
-
+    
+def get_conn():
+    return psycopg2.connect(
+        os.environ['DATABASE_URL'],
+        cursor_factory=RealDictCursor
+    )
+    
 if __name__ == '__main__':
     # serve on all interfaces on port 5001
     app.run(host='0.0.0.0', port=5001)
