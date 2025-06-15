@@ -32,12 +32,12 @@ export default function SeriesDetail() {
       .finally(() => setLoading(false));
   }, [seriesTitle]);
 
-  const replaceEpisode = ({ seriesId, episodeId }) => {
-    setReplacing(prev => ({ ...prev, [episodeId]: true }));
+  const replaceEpisode = (key) => {
+    setReplacing(prev => ({ ...prev, [key]: true }));
     fetch('/api/episodes/replace', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ series_id: seriesId, episode_id: episodeId })
+      body: JSON.stringify({ key })
     })
     .then(res => {
       if (!res.ok) throw new Error(res.statusText);
@@ -107,10 +107,10 @@ export default function SeriesDetail() {
                           <Button
                             variant="warning"
                             size="sm"
-                            disabled={replacing[ep.episodeId]}
-                            onClick={() => replaceEpisode({ seriesId: ep.seriesId, episodeId: ep.episodeId })}
+                            disabled={replacing[ep.key]}
+                            onClick={() => replaceEpisode(ep.key)}
                           >
-                            {replacing[ep.episodeId] ? 'Replacing…' : 'Replace'}
+                            {replacing[ep.key] ? 'Replacing…' : 'Replace'}
                           </Button>
                         </td>
                       </tr>
