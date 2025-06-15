@@ -5,6 +5,35 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, jsonify
+from flask import request, jsonify
+import os
+from analyzer import grab_best_nzb
+from sonarr_client import SonarrClient  # adjust the import path
+
+# initialize Sonarr client once
+sonarr = SonarrClient(
+    base_url=os.getenv("SONARR_URL"),
+    api_key=os.getenv("SONARR_API_KEY"),
+    timeout=10
+)
+
+@app.route('/api/episodes/replace', methods=['POST'])
+def replace_episode():
+    """
+    Expects JSON { series_id: int, episode_id: int }.
+    Calls grab_best_nzb (which handles deletion internally).
+    """
+    data = request.get_json() or {}
+    series_id  = data.get("series_id")
+    episode_id = data.get("episode_id")
+    if series_id is None or episode_id is None:
+        return jsonify({ "error": "series_id and episode_id required" }), 400
+
+    try:
+        grab_best_nzb(sonarr, series_id, episode_id)
+        return jsonify({ "status": "ok" }), 200
+    except Exception as e:
+        return jsonify({ "error": str(e) }), 500
 
 app = Flask(__name__)
 
