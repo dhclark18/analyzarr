@@ -11,14 +11,14 @@ export default function Layout({ children }) {
 
       <Container fluid>
         <Row>
-          <Col xs={2} className="sidebar p-0">
+          <Col xs={1} className="sidebar p-0">
             <Nav className="flex-column bg-dark vh-100">
               <Nav.Link className="text-light">Dashboard</Nav.Link>
               <Nav.Link className="text-light">Settings</Nav.Link>
               {/* add more links here */}
             </Nav>
           </Col>
-          <Col xs={10} className="main-content">
+          <Col xs={11} className="main-content">
             {children}
           </Col>
         </Row>
