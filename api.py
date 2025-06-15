@@ -20,17 +20,31 @@ sonarr = SonarrClient(
 @app.route('/api/episodes/replace', methods=['POST'])
 def replace_episode():
     """
-    Expects JSON { series_id: int, episode_id: int }.
-    Calls grab_best_nzb (which handles deletion internally).
+    Expects JSON { key: <string> } where key is your episodes.key.
+    Looks up series_id & episode_id in the DB, then calls grab_best_nzb.
     """
     data = request.get_json() or {}
-    series_id  = data.get("series_id")
-    episode_id = data.get("episode_id")
-    if series_id is None or episode_id is None:
-        return jsonify({ "error": "series_id and episode_id required" }), 400
+    key = data.get("key")
+    if not key:
+        return jsonify({ "error": "key required" }), 400
+
+    # pull the IDs out of your episodes table
+    conn = get_conn()
+    cur  = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+      SELECT series_id, episode_id
+        FROM episodes
+       WHERE key = %s
+    """, (key,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not row or row.get("series_id") is None or row.get("episode_id") is None:
+        return jsonify({ "error": "no series/episode IDs for key" }), 404
 
     try:
-        grab_best_nzb(sonarr, series_id, episode_id)
+        grab_best_nzb(sonarr, row["series_id"], row["episode_id"])
         return jsonify({ "status": "ok" }), 200
     except Exception as e:
         return jsonify({ "error": str(e) }), 500
