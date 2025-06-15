@@ -3,47 +3,55 @@
   --color-surface: #27293d;
   --color-text:    #e0e0e0;
   --color-text-2:  #b0b0b0;
-
   --color-primary:       #f18025;
   --color-primary-dark:  #c75e00;
   --color-primary-light: #ff9b4a;
-
   --color-accent:        #00bcd4;
   --color-accent-dark:   #008ba3;
   --color-accent-light:  #33dfff;
-  
-  /* Sidebar */
-  --color-sidebar-bg:    #1b1c2c;  /* very dark slate */
-  --color-sidebar-text:  #b0b0c3;  /* soft light gray */
-  --color-sidebar-hover: #27293d;  /* your surface color */
-
-  /* Navbar */
-  --color-navbar-bg:     #232530;  /* deep charcoal */
-  --color-navbar-text:   #e0e0e0;  /* primary text color */
-  --color-navbar-brand:  #f18025;  /* Sonarr‐orange accent */
-
   --color-border: #3a3a4f;
+  --color-sidebar-bg:    #1b1c2c;
+  --color-sidebar-text:  #b0b0c3;
+  --color-sidebar-hover: #27293d;
+  --color-navbar-bg:     #232530;
+  --color-navbar-text:   #e0e0e0;
+  --color-navbar-brand:  #f18025;
 }
 
-/* Apply background & text globally */
+/* global background/text */
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
 }
 
-/* Override Container padding/text */
+/* container padding */
 .app-container {
-  padding-top: 2rem;
-  padding-bottom: 2rem;
+  padding: 1rem 0.5rem;
 }
 
-/* Card surfaces */
-.card.custom-card {
+/* scrollable series list */
+.series-wrapper {
+  max-height: calc(100vh - 56px - 2rem);
+  overflow-y: auto;
+  padding-right: 1rem;
+}
+
+/* cards */
+.custom-card {
   background-color: var(--color-surface) !important;
   border: 1px solid var(--color-border) !important;
+  border-radius: 0.5rem !important;
 }
 
-/* Primary button */
+/* title & seasons text */
+.series-name {
+  color: var(--color-text) !important;
+}
+.seasons-text {
+  color: var(--color-text-2) !important;
+}
+
+/* buttons */
 .btn-primary-custom {
   background-color: var(--color-primary);
   border-color: var(--color-primary-dark);
@@ -53,8 +61,6 @@ body {
   background-color: var(--color-primary-light);
   border-color: var(--color-primary);
 }
-
-/* Accent button */
 .btn-accent {
   background-color: var(--color-accent);
   border-color: var(--color-accent-dark);
@@ -63,31 +69,4 @@ body {
 .btn-accent:hover {
   background-color: var(--color-accent-light);
   border-color: var(--color-accent);
-}
-
-/* Headline style */
-.page-title {
-  font-size: 2rem;
-  margin-bottom: 1.5rem;
-  color: var(--color-text);
-}
-
-.series-name {
-  color: var(--color-text) !important;  /* #e0e0e0 by default */
-}
-
-.seasons-text {
-  color: var(--color-text-2) !important;
-}
-
-/* Fallback for links/buttons where you still need white outline */
-.btn-outline-light {
-  color: var(--color-text);
-  border-color: var(--color-text-2);
-}
-
-.series-wrapper {
-  max-height: calc(100vh - 56px - 2rem);
-  overflow-y: auto;
-  padding-right: 1rem;
 }
