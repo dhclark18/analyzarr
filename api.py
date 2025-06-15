@@ -4,9 +4,7 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from flask import Flask, jsonify
-from flask import request, jsonify
-import os
+from flask import Flask, request, jsonify
 from analyzer import grab_best_nzb, SonarrClient
 
 # ─── create the Flask app first ───────────────────────────────────────────
