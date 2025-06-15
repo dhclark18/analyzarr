@@ -7,8 +7,7 @@ from psycopg2.extras import RealDictCursor
 from flask import Flask, jsonify
 from flask import request, jsonify
 import os
-from analyzer import grab_best_nzb
-from analyzer import SonarrClient  # adjust the import path
+from analyzer import grab_best_nzb, SonarrClient
 
 # initialize Sonarr client once
 sonarr = SonarrClient(
