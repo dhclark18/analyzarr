@@ -65,7 +65,7 @@ export default function App() {
                     <Card.Title className="series-name">{s.title}</Card.Title>
                     <div className="mb-3">
                       <small className="seasons-text me-3">
-                        {s.seasons.length} seasons
+                        {s.seasons.length || [].length} seasons
                       </small>
                       <Badge bg={s.mismatchCount === 0 ? 'success' : 'danger'}>
                         {s.mismatchCount} mismatch{s.mismatchCount !== 1 && 'es'}
