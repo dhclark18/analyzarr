@@ -19,31 +19,27 @@ sonarr = SonarrClient(
 # ─── Main functions and routes ──────────────────────────────────
 def compute_stats():
     conn = get_conn()
-    cur = conn.cursor()
+    # get dict rows
+    cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
-      SELECT
-        (SELECT COUNT(*) FROM episodes) AS totalEpisodes,
-        (SELECT COUNT(DISTINCT CAST(SUBSTRING(code FROM '^S([0-9]{2})') AS INT)) FROM episodes) AS totalSeasons,
-        (SELECT COUNT(DISTINCT e.key)
-           FROM episodes e
-           JOIN episode_tags et ON e.key = et.episode_key
-           JOIN tags t ON et.tag_id = t.id AND t.name = 'problematic-episode'
-        ) AS totalMismatches,
-        (SELECT COUNT(*) FROM episodes WHERE missing_title = TRUE) AS totalMissingTitles;
+        SELECT
+          (SELECT COUNT(*) FROM episodes)                                                             AS "totalEpisodes",
+          (SELECT COUNT(DISTINCT CAST(SUBSTRING(code FROM '^S([0-9]{2})') AS INT)) FROM episodes)        AS "totalSeasons",
+          (SELECT COUNT(DISTINCT e.key)
+             FROM episodes e
+             JOIN episode_tags et ON e.key = et.episode_key
+             JOIN tags t ON et.tag_id = t.id AND t.name = 'problematic-episode'
+          )                                                                                            AS "totalMismatches",
+          (SELECT COUNT(*) FROM episodes WHERE missing_title = TRUE)                                    AS "totalMissingTitles"
     """)
-    stats = cur.fetchone()
+    stats = cur.fetchone()   # this is now a dict
     cur.close()
     conn.close()
-    return {
-        "totalEpisodes":      stats[0],
-        "totalSeasons":       stats[1],
-        "totalMismatches":    stats[2],
-        "totalMissingTitles": stats[3]
-    }
-
+    return stats
+    
 @app.route('/api/stats')
 def stats():
-    return jsonify(compute_stats())
+    return jsonify(compute_stats())  
     
 @app.route('/api/episodes/replace', methods=['POST'])
 def replace_episode():
