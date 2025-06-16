@@ -1,12 +1,32 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Navbar, Nav } from 'react-bootstrap';
 import './Layout.css';
 
 export default function Layout({ children }) {
+  const [stats, setStats] = useState({
+    totalEpisodes: 0,
+    totalSeasons: 0,
+    totalMismatches: 0,
+    totalMissingTitles: 0,
+  });
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then(res => res.ok ? res.json() : Promise.reject(res.statusText))
+      .then(data => setStats(data))
+      .catch(console.error);
+  }, []);
+
   return (
     <>
       <Navbar bg="dark" variant="dark" expand={false} className="mb-3">
         <Navbar.Brand className="ms-3">Analyzarr</Navbar.Brand>
+        <Nav className="ms-auto me-3">
+          <Nav.Text>Total Episodes: {stats.totalEpisodes}</Nav.Text>
+          <Nav.Text className="ms-4">Seasons: {stats.totalSeasons}</Nav.Text>
+          <Nav.Text className="ms-4">Mismatches: {stats.totalMismatches}</Nav.Text>
+          <Nav.Text className="ms-4">Missing Titles: {stats.totalMissingTitles}</Nav.Text>
+        </Nav>
       </Navbar>
 
       <Container fluid>
@@ -15,7 +35,6 @@ export default function Layout({ children }) {
             <Nav className="flex-column bg-dark vh-100">
               <Nav.Link className="text-light">Dashboard</Nav.Link>
               <Nav.Link className="text-light">Settings</Nav.Link>
-              {/* add more links here */}
             </Nav>
           </Col>
           <Col xs={11} className="main-content">
