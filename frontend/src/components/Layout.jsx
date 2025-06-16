@@ -21,27 +21,37 @@ export default function Layout({ children }) {
     <>
       <Navbar bg="dark" variant="dark" expand={false} className="mb-3">
         <Navbar.Brand className="ms-3">Analyzarr</Navbar.Brand>
-        <Nav className="ms-auto me-3">
-          <Nav.Text>Total Episodes: {stats.totalEpisodes}</Nav.Text>
-          <Nav.Text className="ms-4">Seasons: {stats.totalSeasons}</Nav.Text>
-          <Nav.Text className="ms-4">Mismatches: {stats.totalMismatches}</Nav.Text>
-          <Nav.Text className="ms-4">Missing Titles: {stats.totalMissingTitles}</Nav.Text>
-        </Nav>
+        <Navbar.Collapse className="justify-content-end me-3">
+          <Navbar.Text>
+            Total Episodes: {stats.totalEpisodes}
+          </Navbar.Text>
+          <Navbar.Text className="ms-4">
+            Seasons: {stats.totalSeasons}
+          </Navbar.Text>
+          <Navbar.Text className="ms-4">
+            Mismatches: {stats.totalMismatches}
+          </Navbar.Text>
+          <Navbar.Text className="ms-4">
+            Missing Titles: {stats.totalMissingTitles}
+          </Navbar.Text>
+        </Navbar.Collapse>
       </Navbar>
 
       <Container fluid>
         <Row>
-          <Col xs={1} className="sidebar p-0">
+          <Col xs="auto" className="sidebar p-0">
             <Nav className="flex-column bg-dark vh-100">
               <Nav.Link className="text-light">Dashboard</Nav.Link>
               <Nav.Link className="text-light">Settings</Nav.Link>
             </Nav>
           </Col>
-          <Col xs={11} className="main-content">
+          <Col className="main-content">
             {children}
           </Col>
         </Row>
       </Container>
     </>
+  );
+}
   );
 }
