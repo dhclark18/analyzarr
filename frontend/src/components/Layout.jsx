@@ -2,19 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Navbar, Nav } from 'react-bootstrap';
 import './Layout.css';
 
-const Layout = ({ children }) => {
+export default function Layout({ children }) {
   const [stats, setStats] = useState({
     totalEpisodes: 0,
     totalSeasons: 0,
     totalMismatches: 0,
-    totalMissingTitles: 0,
+    totalMissingTitles: 0
   });
 
   useEffect(() => {
     fetch('/api/stats')
-      .then(res => res.json())
+      .then(res => res.ok ? res.json() : Promise.reject(res.statusText))
       .then(data => setStats(data))
-      .catch(console.error);
+      .catch(err => console.error('Failed to load stats:', err));
   }, []);
 
   return (
@@ -43,17 +43,19 @@ const Layout = ({ children }) => {
         <Row>
           <Col xs="auto" className="sidebar p-0">
             <Nav className="flex-column bg-dark vh-100">
-              <Nav.Link href="/">Dashboard</Nav.Link>
-              <Nav.Link href="/settings">Settings</Nav.Link>
+              <Nav.Link href="/" className="text-light">
+                Dashboard
+              </Nav.Link>
+              <Nav.Link href="/settings" className="text-light">
+                Settings
+              </Nav.Link>
             </Nav>
           </Col>
-          <Col className="main-content">
+          <Col className="main-content p-3">
             {children}
           </Col>
         </Row>
       </Container>
     </>
   );
-};
-
-export default Layout;
+}
