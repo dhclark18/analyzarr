@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Navbar, Nav } from 'react-bootstrap';
 import './Layout.css';
 
-export default function Layout({ children }) {
+const Layout = ({ children }) => {
   const [stats, setStats] = useState({
     totalEpisodes: 0,
     totalSeasons: 0,
@@ -12,37 +12,39 @@ export default function Layout({ children }) {
 
   useEffect(() => {
     fetch('/api/stats')
-      .then(res => res.ok ? res.json() : Promise.reject(res.statusText))
+      .then(res => res.json())
       .then(data => setStats(data))
       .catch(console.error);
   }, []);
 
   return (
     <>
-      <Navbar bg="dark" variant="dark" expand={false} className="mb-3">
-        <Navbar.Brand className="ms-3">Analyzarr</Navbar.Brand>
-        <Navbar.Collapse className="justify-content-end me-3">
-          <Navbar.Text>
-            Total Episodes: {stats.totalEpisodes}
-          </Navbar.Text>
-          <Navbar.Text className="ms-4">
-            Seasons: {stats.totalSeasons}
-          </Navbar.Text>
-          <Navbar.Text className="ms-4">
-            Mismatches: {stats.totalMismatches}
-          </Navbar.Text>
-          <Navbar.Text className="ms-4">
-            Missing Titles: {stats.totalMissingTitles}
-          </Navbar.Text>
-        </Navbar.Collapse>
+      <Navbar bg="dark" variant="dark" className="mb-3">
+        <Container fluid>
+          <Navbar.Brand>Analyzarr</Navbar.Brand>
+          <Nav className="ms-auto">
+            <Nav.Item className="text-light me-3">
+              Episodes: {stats.totalEpisodes}
+            </Nav.Item>
+            <Nav.Item className="text-light me-3">
+              Seasons: {stats.totalSeasons}
+            </Nav.Item>
+            <Nav.Item className="text-light me-3">
+              Mismatches: {stats.totalMismatches}
+            </Nav.Item>
+            <Nav.Item className="text-light">
+              Missing Titles: {stats.totalMissingTitles}
+            </Nav.Item>
+          </Nav>
+        </Container>
       </Navbar>
 
       <Container fluid>
         <Row>
           <Col xs="auto" className="sidebar p-0">
             <Nav className="flex-column bg-dark vh-100">
-              <Nav.Link className="text-light">Dashboard</Nav.Link>
-              <Nav.Link className="text-light">Settings</Nav.Link>
+              <Nav.Link href="/">Dashboard</Nav.Link>
+              <Nav.Link href="/settings">Settings</Nav.Link>
             </Nav>
           </Col>
           <Col className="main-content">
@@ -52,6 +54,6 @@ export default function Layout({ children }) {
       </Container>
     </>
   );
-}
-  );
-}
+};
+
+export default Layout;
