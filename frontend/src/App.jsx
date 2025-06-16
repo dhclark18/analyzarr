@@ -13,16 +13,18 @@ export default function App() {
   useEffect(() => {
     Promise.all([ fetchSeries(), fetchMismatchCounts() ])
       .then(([seriesData, mismatchData]) => {
+        // build lookup for mismatch counts
         const lookup = mismatchData.reduce((acc, { seriesTitle, count }) => {
           acc[seriesTitle] = count;
           return acc;
         }, {});
-        setSeries(
-          seriesData.map(s => ({
-            ...s,
-            mismatchCount: lookup[s.title] || 0
-          }))
-        );
+        // merge data and sort alphabetically by title
+        const merged = seriesData.map(s => ({
+          ...s,
+          mismatchCount: lookup[s.title] || 0
+        }));
+        merged.sort((a, b) => a.title.localeCompare(b.title));
+        setSeries(merged);
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
