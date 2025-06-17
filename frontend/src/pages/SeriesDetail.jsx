@@ -9,7 +9,6 @@ import {
 } from 'react-bootstrap';
 import Layout                          from '../components/Layout';
 import './SeriesDetail.css';
-import EpisodeDetail from './pages/EpisodeDetail';
 
 export default function SeriesDetail() {
   const { seriesTitle } = useParams();
