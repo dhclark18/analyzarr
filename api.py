@@ -146,8 +146,10 @@ def get_episode(key):
         SELECT
           e.key,
           e.code,
-          e.expected_title    AS expectedTitle,
-          e.actual_title      AS actualTitle,
+          e.expected_title    AS "expectedTitle",
+          e.norm_expected AS "norm_expected",
+          e.actual_title      AS "actualTitle",
+          e.norm_extracted AS "norm_extracted",
           e.confidence,
           e.substring_override,
           e.missing_title,
@@ -159,7 +161,9 @@ def get_episode(key):
         GROUP BY
           e.key, e.code,
           e.expected_title,
+          e.norm_expected,
           e.actual_title,
+          e.norm_extracted,
           e.confidence,
           e.substring_override,
           e.missing_title
