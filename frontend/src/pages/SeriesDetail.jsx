@@ -97,9 +97,16 @@ export default function SeriesDetail() {
                   </thead>
                   <tbody>
                     {episodesBySeason[seasonNum].map(ep => (
-                      <tr key={ep.key}>
+                      <tr key={ep.key} style={{ cursor: 'pointer' }}>
                         <td>{ep.matches ? '✅' : '❌'}</td>
-                        <td>{ep.code}</td>
+                        <td>
+                          <Link
+                            to={`/episode/${encodeURIComponent(ep.key)}`}
+                            className="text-decoration-none text-light"
+                          >
+                            {ep.code}
+                          </Link>
+                        </td>
                         <td>{ep.expectedTitle}</td>
                         <td>{ep.actualTitle}</td>
                         <td>{ep.confidence}</td>
