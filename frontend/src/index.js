@@ -13,6 +13,7 @@ root.render(
     <Routes>
       <Route path="/" element={<App />} />
       <Route path="/series/:seriesTitle" element={<SeriesDetail />} />
+      <Route path="/episode/:key" element={<EpisodeDetail />} />
     </Routes>
   </BrowserRouter>
 );
