@@ -136,6 +136,31 @@ def series_episodes(series_title):
     cur.close()
     conn.close()
     return jsonify(rows)
+
+@app.route('/api/episode/<path:key>')
+def get_episode(key):
+    row = db.session.execute(
+        \"\"\"
+        SELECT
+          key,
+          code,
+          expected_title    AS expectedTitle,
+          normalize_expected AS norm_expected,
+          actual_title      AS actualTitle,
+          normalize_extracted AS norm_extracted,
+          confidence,
+          tags,
+          substring_override,
+          missing_title
+        FROM episodes
+        WHERE key = :key
+        \"\"\", {'key': key}
+    ).first()
+    if not row:
+        abort(404)
+    ep = dict(row)
+    ep['tags'] = ep['tags'].split(',') if ep.get('tags') else []
+    return jsonify(ep)
     
 def get_conn():
     return psycopg2.connect(
