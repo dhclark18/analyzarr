@@ -141,32 +141,36 @@ def series_episodes(series_title):
 def get_episode(key):
     conn = get_conn()
     cur  = conn.cursor()
-    cur.execute(
-        """
+
+    cur.execute("""
         SELECT
-          key,
-          code,
-          expected_title    AS expectedTitle,
-          norm_expected AS norm_expected,
-          actual_title      AS actualTitle,
-          norm_extracted AS norm_extracted,
-          confidence,
-          tags,
-          substring_override,
-          missing_title
-        FROM episodes
-        WHERE key = %(key)s
-        """,
-        {'key': key}
-    )
+          e.key,
+          e.code,
+          e.expected_title    AS expectedTitle,
+          e.actual_title      AS actualTitle,
+          e.confidence,
+          e.substring_override,
+          e.missing_title,
+          COALESCE(array_remove(array_agg(t.name), NULL), '{}') AS tags
+        FROM episodes e
+        LEFT JOIN episode_tags et ON e.key = et.episode_key
+        LEFT JOIN tags t           ON et.tag_id = t.id
+        WHERE e.key = %(key)s
+        GROUP BY
+          e.key, e.code,
+          e.expected_title,
+          e.actual_title,
+          e.confidence,
+          e.substring_override,
+          e.missing_title
+    """, {'key': key})
+
     row = cur.fetchone()
     conn.close()
-
     if not row:
         abort(404)
 
     ep = dict(row)
-    ep['tags'] = ep['tags'].split(',') if ep.get('tags') else []
     return jsonify(ep)
     
 def get_conn():
