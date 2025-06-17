@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 import App from './App';
 import SeriesDetail from './pages/SeriesDetail';
+import EpisodeDetail from './pages/EpisodeDetail';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
