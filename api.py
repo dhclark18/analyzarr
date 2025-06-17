@@ -139,7 +139,9 @@ def series_episodes(series_title):
 
 @app.route('/api/episode/<path:key>')
 def get_episode(key):
-    row = db.session.execute(
+    conn = get_conn()
+    cur  = conn.cursor()
+    cur.execute(
         """
         SELECT
           key,
@@ -153,12 +155,16 @@ def get_episode(key):
           substring_override,
           missing_title
         FROM episodes
-        WHERE key = :key
-        """, 
+        WHERE key = %(key)s
+        """,
         {'key': key}
-    ).first()
+    )
+    row = cur.fetchone()
+    conn.close()
+
     if not row:
         abort(404)
+
     ep = dict(row)
     ep['tags'] = ep['tags'].split(',') if ep.get('tags') else []
     return jsonify(ep)
