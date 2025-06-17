@@ -140,7 +140,7 @@ def series_episodes(series_title):
 @app.route('/api/episode/<path:key>')
 def get_episode(key):
     row = db.session.execute(
-        \"\"\"
+        """
         SELECT
           key,
           code,
@@ -154,7 +154,8 @@ def get_episode(key):
           missing_title
         FROM episodes
         WHERE key = :key
-        \"\"\", {'key': key}
+        """, 
+        {'key': key}
     ).first()
     if not row:
         abort(404)
