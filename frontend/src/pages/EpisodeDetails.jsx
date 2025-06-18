@@ -3,12 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import {
   Container,
   Row,
-  Col,
   Table,
   Spinner,
   Alert,
   Button,
-  Badge
+  Badge,
+  Form,
+  InputGroup
 } from 'react-bootstrap';
 import Layout from '../components/Layout';
 
@@ -17,14 +18,62 @@ export default function EpisodeDetail() {
   const [episode, setEpisode] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [newTag, setNewTag] = useState('');
+  const [tagOpInProgress, setTagOpInProgress] = useState(false);
 
+  // Fetch episode and its tags
   useEffect(() => {
+    setLoading(true);
     fetch(`/api/episode/${encodeURIComponent(key)}`)
       .then(res => res.ok ? res.json() : Promise.reject(res.statusText))
       .then(data => setEpisode(data))
-      .catch(err => setError(err))
+      .catch(err => setError(err.toString()))
       .finally(() => setLoading(false));
   }, [key]);
+
+  // Add a tag to the episode
+  const addTag = () => {
+    if (!newTag.trim()) return;
+    setTagOpInProgress(true);
+    fetch(`/api/episode/${encodeURIComponent(key)}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag: newTag.trim() })
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
+      .then(() => {
+        setEpisode(prev => ({
+          ...prev,
+          tags: [...(prev.tags || []), newTag.trim()]
+        }));
+        setNewTag('');
+      })
+      .catch(err => setError(err.toString()))
+      .finally(() => setTagOpInProgress(false));
+  };
+
+  // Remove a tag from the episode
+  const removeTag = (tag) => {
+    setTagOpInProgress(true);
+    fetch(`/api/episode/${encodeURIComponent(key)}/tags/${encodeURIComponent(tag)}`, {
+      method: 'DELETE'
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
+      .then(() => {
+        setEpisode(prev => ({
+          ...prev,
+          tags: prev.tags.filter(t => t !== tag)
+        }));
+      })
+      .catch(err => setError(err.toString()))
+      .finally(() => setTagOpInProgress(false));
+  };
 
   if (loading) {
     return (
@@ -40,7 +89,7 @@ export default function EpisodeDetail() {
     return (
       <Layout>
         <Container className="py-4">
-          <Alert variant="danger">Error loading episode: {error.toString()}</Alert>
+          <Alert variant="danger">Error: {error}</Alert>
           <Button as={Link} to="/" variant="outline-light" className="mt-2">
             ← Back to Library
           </Button>
@@ -55,11 +104,40 @@ export default function EpisodeDetail() {
         <Button as={Link} to="/" variant="outline-light" className="mb-3">
           ← Back to Library
         </Button>
-        <Row className="mb-4">
-          <Col>
-            <h1>Episode Details</h1>
-          </Col>
+
+        <Row className="mb-3">
+          <h2>Tags</h2>
+          <div>
+            {(episode.tags || []).map(tag => (
+              <Badge
+                key={tag}
+                bg="secondary"
+                pill
+                className="me-1"
+                style={{ cursor: 'pointer' }}
+                onClick={() => !tagOpInProgress && removeTag(tag)}
+              >
+                {tag} ×
+              </Badge>
+            ))}
+          </div>
+          <InputGroup className="mt-2" style={{ maxWidth: '300px' }}>
+            <Form.Control
+              placeholder="New tag"
+              value={newTag}
+              onChange={e => setNewTag(e.target.value)}
+              disabled={tagOpInProgress}
+            />
+            <Button
+              variant="outline-light"
+              onClick={addTag}
+              disabled={tagOpInProgress || !newTag.trim()}
+            >
+              Add
+            </Button>
+          </InputGroup>
         </Row>
+
         <Table striped bordered hover responsive variant="dark">
           <tbody>
             <tr>
@@ -67,30 +145,12 @@ export default function EpisodeDetail() {
               <td>{episode.expectedTitle}</td>
             </tr>
             <tr>
-              <th>Normalized Expected</th>
-              <td>{episode.norm_expected}</td>
-            </tr>
-            <tr>
               <th>Actual Title</th>
               <td>{episode.actualTitle}</td>
             </tr>
             <tr>
-              <th>Normalized Actual</th>
-              <td>{episode.norm_extracted}</td>
-            </tr>
-            <tr>
               <th>Confidence</th>
               <td>{episode.confidence}</td>
-            </tr>
-            <tr>
-              <th>Tags</th>
-              <td>
-                {episode.tags?.map(tag => (
-                  <Badge key={tag} bg="secondary" className="me-1">
-                    {tag}
-                  </Badge>
-                ))}
-              </td>
             </tr>
             <tr>
               <th>Substring Override?</th>
