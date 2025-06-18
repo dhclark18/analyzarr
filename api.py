@@ -4,7 +4,7 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 from analyzer import grab_best_nzb, SonarrClient
 
 # ─── create the Flask app first ───────────────────────────────────────────
@@ -147,12 +147,14 @@ def get_episode(key):
           e.key,
           e.code,
           e.expected_title    AS "expectedTitle",
-          e.norm_expected AS "norm_expected",
+          e.norm_expected     AS "norm_expected",
           e.actual_title      AS "actualTitle",
-          e.norm_extracted AS "norm_extracted",
+          e.norm_extracted    AS "norm_extracted",
           e.confidence,
           e.substring_override,
           e.missing_title,
+          e.release_group,
+          e.media_info,
           COALESCE(array_remove(array_agg(t.name), NULL), '{}') AS tags
         FROM episodes e
         LEFT JOIN episode_tags et ON e.key = et.episode_key
@@ -166,17 +168,20 @@ def get_episode(key):
           e.norm_extracted,
           e.confidence,
           e.substring_override,
-          e.missing_title
+          e.missing_title,
+          e.release_group,
+          e.media_info
     """, {'key': key})
 
     row = cur.fetchone()
     conn.close()
+
     if not row:
         abort(404)
 
+    # row is a psycopg2.extras.DictRow (or similar), so dict(row) yields your JSON
     ep = dict(row)
     return jsonify(ep)
-from flask import request, jsonify, abort
 
 @app.route('/api/episode/<path:key>/tags', methods=['POST'])
 def add_tag_to_episode(key):
