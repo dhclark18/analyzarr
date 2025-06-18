@@ -21,7 +21,6 @@ export default function EpisodeDetail() {
   const [newTag, setNewTag] = useState('');
   const [tagOpInProgress, setTagOpInProgress] = useState(false);
 
-  // Fetch episode and its tags
   useEffect(() => {
     setLoading(true);
     fetch(`/api/episode/${encodeURIComponent(key)}`)
@@ -31,7 +30,6 @@ export default function EpisodeDetail() {
       .finally(() => setLoading(false));
   }, [key]);
 
-  // Add a tag to the episode
   const addTag = () => {
     if (!newTag.trim()) return;
     setTagOpInProgress(true);
@@ -55,7 +53,6 @@ export default function EpisodeDetail() {
       .finally(() => setTagOpInProgress(false));
   };
 
-  // Remove a tag from the episode
   const removeTag = (tag) => {
     setTagOpInProgress(true);
     fetch(`/api/episode/${encodeURIComponent(key)}/tags/${encodeURIComponent(tag)}`, {
@@ -105,7 +102,32 @@ export default function EpisodeDetail() {
           ← Back to Library
         </Button>
 
-        <Row className="mb-3">
+        <Table striped bordered hover responsive variant="dark">
+          <tbody>
+            <tr>
+              <th>Expected Title</th>
+              <td>{episode.expectedTitle}</td>
+            </tr>
+            <tr>
+              <th>Actual Title</th>
+              <td>{episode.actualTitle}</td>
+            </tr>
+            <tr>
+              <th>Confidence</th>
+              <td>{episode.confidence}</td>
+            </tr>
+            <tr>
+              <th>Substring Override?</th>
+              <td>{episode.substring_override ? 'Yes' : 'No'}</td>
+            </tr>
+            <tr>
+              <th>Missing Title?</th>
+              <td>{episode.missing_title ? 'Yes' : 'No'}</td>
+            </tr>
+          </tbody>
+        </Table>
+
+        <Row className="mt-4">
           <h2>Tags</h2>
           <div>
             {(episode.tags || []).map(tag => (
@@ -137,31 +159,6 @@ export default function EpisodeDetail() {
             </Button>
           </InputGroup>
         </Row>
-
-        <Table striped bordered hover responsive variant="dark">
-          <tbody>
-            <tr>
-              <th>Expected Title</th>
-              <td>{episode.expectedTitle}</td>
-            </tr>
-            <tr>
-              <th>Actual Title</th>
-              <td>{episode.actualTitle}</td>
-            </tr>
-            <tr>
-              <th>Confidence</th>
-              <td>{episode.confidence}</td>
-            </tr>
-            <tr>
-              <th>Substring Override?</th>
-              <td>{episode.substring_override ? 'Yes' : 'No'}</td>
-            </tr>
-            <tr>
-              <th>Missing Title?</th>
-              <td>{episode.missing_title ? 'Yes' : 'No'}</td>
-            </tr>
-          </tbody>
-        </Table>
       </Container>
     </Layout>
   );
