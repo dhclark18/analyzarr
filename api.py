@@ -176,6 +176,87 @@ def get_episode(key):
 
     ep = dict(row)
     return jsonify(ep)
+from flask import request, jsonify, abort
+
+@app.route('/api/episode/<path:key>/tags', methods=['POST'])
+def add_tag_to_episode(key):
+    data = request.get_json() or {}
+    tag = data.get('tag', '').strip()
+    if not tag:
+        abort(400, description="Missing 'tag' in request body")
+
+    conn = get_conn()
+    cur  = conn.cursor()
+
+    # 1) Ensure the tag exists in the tags table
+    cur.execute(
+        "INSERT INTO tags(name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+        (tag,)
+    )
+
+    # 2) Get its ID
+    cur.execute(
+        "SELECT id FROM tags WHERE name = %s",
+        (tag,)
+    )
+    tag_id = cur.fetchone()['id']
+
+    # 3) Link it to the episode (no-op if already exists)
+    cur.execute(
+        "INSERT INTO episode_tags(episode_key, tag_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+        (key, tag_id)
+    )
+
+    conn.commit()
+
+    # 4) Return the updated tag list
+    cur.execute("""
+        SELECT t.name
+        FROM episode_tags et
+        JOIN tags t ON et.tag_id = t.id
+        WHERE et.episode_key = %s
+    """, (key,))
+    updated = [r['name'] for r in cur.fetchall()]
+
+    conn.close()
+    return jsonify(tags=updated), 201
+
+
+@app.route('/api/episode/<path:key>/tags/<string:tag>', methods=['DELETE'])
+def remove_tag_from_episode(key, tag):
+    conn = get_conn()
+    cur  = conn.cursor()
+
+    # 1) Find the tag ID (404 if it doesn't even exist)
+    cur.execute(
+        "SELECT id FROM tags WHERE name = %s",
+        (tag,)
+    )
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        abort(404, description=f"Tag '{tag}' not found")
+
+    tag_id = row['id']
+
+    # 2) Remove the link from episode_tags
+    cur.execute(
+        "DELETE FROM episode_tags WHERE episode_key = %s AND tag_id = %s",
+        (key, tag_id)
+    )
+    conn.commit()
+
+    # 3) Return the updated tag list
+    cur.execute("""
+        SELECT t.name
+        FROM episode_tags et
+        JOIN tags t ON et.tag_id = t.id
+        WHERE et.episode_key = %s
+    """, (key,))
+    updated = [r['name'] for r in cur.fetchall()]
+
+    conn.close()
+    return jsonify(tags=updated), 200
     
 def get_conn():
     return psycopg2.connect(
