@@ -3,13 +3,15 @@ import { useParams, Link } from 'react-router-dom';
 import {
   Container,
   Row,
+  Col,
   Table,
   Spinner,
   Alert,
   Button,
   Badge,
   Form,
-  InputGroup
+  InputGroup,
+  Card
 } from 'react-bootstrap';
 import Layout from '../components/Layout';
 
@@ -95,6 +97,8 @@ export default function EpisodeDetail() {
     );
   }
 
+  const cardStyle = { minHeight: '140px' };
+
   return (
     <Layout>
       <Container fluid className="py-4">
@@ -127,7 +131,70 @@ export default function EpisodeDetail() {
           </tbody>
         </Table>
 
-        <Row className="mt-4">
+        <h2 className="mt-5 mb-3">Analysis Steps</h2>
+        <Row className="g-4 align-items-center justify-content-center text-center">
+          <Col md={2}>
+            <Card bg="dark" text="light" style={cardStyle}>
+              <Card.Body>
+                <Card.Title>Step 1</Card.Title>
+                <Card.Text>
+                  Extract expected title:
+                  <br /><code>{episode.expectedTitle}</code>
+                </Card.Text>
+              </Card.Body>
+            </Card>
+          </Col>
+          <Col md="auto">➡️</Col>
+          <Col md={2}>
+            <Card bg="dark" text="light" style={cardStyle}>
+              <Card.Body>
+                <Card.Title>Step 2</Card.Title>
+                <Card.Text>
+                  Extract actual title:
+                  <br /><code>{episode.actualTitle}</code>
+                </Card.Text>
+              </Card.Body>
+            </Card>
+          </Col>
+          <Col md="auto">➡️</Col>
+          <Col md={2}>
+            <Card bg="dark" text="light" style={cardStyle}>
+              <Card.Body>
+                <Card.Title>Step 3</Card.Title>
+                <Card.Text>
+                  Normalize expected:
+                  <br /><code>{episode.norm_expected || '—'}</code>
+                </Card.Text>
+              </Card.Body>
+            </Card>
+          </Col>
+          <Col md="auto">➡️</Col>
+          <Col md={2}>
+            <Card bg="dark" text="light" style={cardStyle}>
+              <Card.Body>
+                <Card.Title>Step 4</Card.Title>
+                <Card.Text>
+                  Normalize actual:
+                  <br /><code>{episode.norm_extracted || '—'}</code>
+                </Card.Text>
+              </Card.Body>
+            </Card>
+          </Col>
+          <Col md="auto">➡️</Col>
+          <Col md={2}>
+            <Card bg={episode.norm_expected === episode.norm_extracted ? 'success' : 'danger'} text="white" style={cardStyle}>
+              <Card.Body>
+                <Card.Title>Step 5</Card.Title>
+                <Card.Text>
+                  Final Comparison:
+                  <br />{episode.norm_expected === episode.norm_extracted ? '✅ Match' : '❌ Mismatch'}
+                </Card.Text>
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+
+        <Row className="mt-5">
           <h2>Tags</h2>
           <div>
             {(episode.tags || []).map(tag => (
