@@ -19,6 +19,7 @@ import requests
 from psycopg2.pool import SimpleConnectionPool
 from rapidfuzz.fuzz import token_sort_ratio
 from word2number import w2n
+import psycopg2.extras
 
 # -----------------------------------------------------------------------------
 # CLI & Configuration
@@ -90,18 +91,20 @@ def init_db(conn):
     # 1) episodes must exist before anything references it
     cur.execute("""
         CREATE TABLE IF NOT EXISTS episodes (
-          key            TEXT PRIMARY KEY,
-          code           TEXT NOT NULL,
-          series_title   TEXT NOT NULL,
-          expected_title TEXT NOT NULL,
-          actual_title   TEXT NOT NULL,
-          confidence         REAL    NOT NULL DEFAULT 0.0,
-          norm_expected      TEXT    NOT NULL DEFAULT '',
-          norm_extracted     TEXT    NOT NULL DEFAULT '',
+          key               TEXT    PRIMARY KEY,
+          code              TEXT    NOT NULL,
+          series_title      TEXT    NOT NULL,
+          expected_title    TEXT    NOT NULL,
+          actual_title      TEXT    NOT NULL,
+          confidence        REAL    NOT NULL DEFAULT 0.0,
+          norm_expected     TEXT    NOT NULL DEFAULT '',
+          norm_extracted    TEXT    NOT NULL DEFAULT '',
           substring_override BOOLEAN NOT NULL DEFAULT FALSE,
-          missing_title      BOOLEAN NOT NULL DEFAULT FALSE,
-          series_id          INTEGER NOT NULL,   
-          episode_id         INTEGER NOT NULL
+          missing_title     BOOLEAN NOT NULL DEFAULT FALSE,
+          series_id         INTEGER NOT NULL,
+          episode_id        INTEGER NOT NULL,
+          release_group     TEXT    NOT NULL DEFAULT '',
+          media_info        JSONB   NOT NULL DEFAULT '{}'::jsonb
         );
     """)
 
@@ -109,7 +112,7 @@ def init_db(conn):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS tags (
           id   SERIAL PRIMARY KEY,
-          name TEXT UNIQUE NOT NULL
+          name TEXT   UNIQUE NOT NULL
         );
     """)
 
@@ -126,7 +129,7 @@ def init_db(conn):
 
     conn.commit()
     cur.close()
-
+ 
 # -----------------------------------------------------------------------------
 # Tag Helpers
 # -----------------------------------------------------------------------------
@@ -204,7 +207,9 @@ def insert_episode(
     substring_override: bool,
     missing_title: bool,
     series_id: int,
-    episode_id: int
+    episode_id: int,
+    release_group: str,
+    media_info: dict
 ):
     with conn.cursor() as cur:
         cur.execute("""
@@ -220,15 +225,15 @@ def insert_episode(
                 substring_override,
                 missing_title,
                 series_id,
-                episode_id
-            )
-            VALUES (
+                episode_id,
+                release_group,
+                media_info
+            ) VALUES (
                 %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s
             )
-            ON CONFLICT (key) DO UPDATE
-            SET
+            ON CONFLICT (key) DO UPDATE SET
                 actual_title       = EXCLUDED.actual_title,
                 confidence         = EXCLUDED.confidence,
                 norm_expected      = EXCLUDED.norm_expected,
@@ -236,7 +241,9 @@ def insert_episode(
                 substring_override = EXCLUDED.substring_override,
                 missing_title      = EXCLUDED.missing_title,
                 series_id          = EXCLUDED.series_id,
-                episode_id         = EXCLUDED.episode_id;
+                episode_id         = EXCLUDED.episode_id,
+                release_group      = EXCLUDED.release_group,
+                media_info         = EXCLUDED.media_info;
         """, (
             key,
             series_title,
@@ -249,7 +256,9 @@ def insert_episode(
             substring_override,
             missing_title,
             series_id,
-            episode_id
+            episode_id,
+            release_group,
+            psycopg2.extras.Json(media_info)
         ))
     conn.commit()
 
@@ -636,7 +645,10 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     norm_scene = normalize_title(scene)
     substring_override = (norm_expected in norm_extracted)
     missing_title      = is_missing_title(scene, expected_title)
-
+    
+    release_group = epfile.get("releaseGroup", "")
+    media_info    = epfile.get("mediaInfo", {}) 
+    
     logging.info(f"\n📺 {nice} {code}")
     logging.info(f"🎯 Expected: {ep['title']}")
     logging.info(f"🎞️ Scene:    {scene}")
@@ -649,7 +661,7 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     confidence = compute_confidence(expected_title, scene)
     
     insert_episode(
-        key, nice, code, expected_title, scene, confidence, norm_expected, norm_extracted, substring_override, missing_title, series["id"], ep["id"]
+        key, nice, code, expected_title, scene, confidence, norm_expected, norm_extracted, substring_override, missing_title, series["id"], ep["id"], release_group, media_info
     )
 
     # On match: check for and add matched tag
