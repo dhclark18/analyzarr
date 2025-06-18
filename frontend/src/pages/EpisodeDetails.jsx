@@ -97,6 +97,7 @@ export default function EpisodeDetail() {
     );
   }
 
+  const mi = episode.media_info || {};
   const cardStyle = { minHeight: '140px' };
 
   return (
@@ -132,16 +133,59 @@ export default function EpisodeDetail() {
               <th>Release Group</th>
               <td>{episode.release_group || '–'}</td>
             </tr>
+
+            {/* ─── MediaInfo Fields ─────────────────────────────────────────────────── */}
             <tr>
-              <th>Media Info</th>
-              <td style={{ padding: 0 }}>
-                <pre
-                  className="bg-dark text-light m-0 p-2"
-                  style={{ whiteSpace: 'pre-wrap', fontSize: '0.85em' }}
-                >
-                  {JSON.stringify(episode.media_info, null, 2)}
-                </pre>
-              </td>
+              <th>Container / Resolution</th>
+              <td>{mi.resolution || '–'}</td>
+            </tr>
+            <tr>
+              <th>Video Codec</th>
+              <td>{mi.videoCodec || '–'}</td>
+            </tr>
+            <tr>
+              <th>Video Bitrate</th>
+              <td>{mi.videoBitrate ? `${mi.videoBitrate} kbps` : '–'}</td>
+            </tr>
+            <tr>
+              <th>Video FPS</th>
+              <td>{mi.videoFps ? `${mi.videoFps} fps` : '–'}</td>
+            </tr>
+            <tr>
+              <th>Video Bit Depth</th>
+              <td>{mi.videoBitDepth != null ? mi.videoBitDepth : '–'}</td>
+            </tr>
+            <tr>
+              <th>Run Time</th>
+              <td>{mi.runTime || '–'}</td>
+            </tr>
+            <tr>
+              <th>Scan Type</th>
+              <td>{mi.scanType || '–'}</td>
+            </tr>
+            <tr>
+              <th>Subtitles</th>
+              <td>{mi.subtitles || '–'}</td>
+            </tr>
+            <tr>
+              <th>Audio Codec</th>
+              <td>{mi.audioCodec || '–'}</td>
+            </tr>
+            <tr>
+              <th>Audio Bitrate</th>
+              <td>{mi.audioBitrate ? `${mi.audioBitrate} kbps` : '–'}</td>
+            </tr>
+            <tr>
+              <th>Audio Channels</th>
+              <td>{mi.audioChannels || '–'}</td>
+            </tr>
+            <tr>
+              <th>Audio Languages</th>
+              <td>{mi.audioLanguages || '–'}</td>
+            </tr>
+            <tr>
+              <th>Audio Streams</th>
+              <td>{mi.audioStreamCount != null ? mi.audioStreamCount : '–'}</td>
             </tr>
           </tbody>
         </Table>
