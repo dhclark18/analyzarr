@@ -128,6 +128,21 @@ export default function EpisodeDetail() {
               <th>Missing Title?</th>
               <td>{episode.missing_title ? 'Yes' : 'No'}</td>
             </tr>
+            <tr>
+              <th>Release Group</th>
+              <td>{episode.release_group || '–'}</td>
+            </tr>
+            <tr>
+              <th>Media Info</th>
+              <td style={{ padding: 0 }}>
+                <pre
+                  className="bg-dark text-light m-0 p-2"
+                  style={{ whiteSpace: 'pre-wrap', fontSize: '0.85em' }}
+                >
+                  {JSON.stringify(episode.media_info, null, 2)}
+                </pre>
+              </td>
+            </tr>
           </tbody>
         </Table>
 
