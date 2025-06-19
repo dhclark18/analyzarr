@@ -368,9 +368,27 @@ def normalize_title(text: str) -> str:
 
 def has_episode_numbers(title: str) -> bool:
     return bool(re.search(r'[sS]\d{1,2}[eE]\d{1,2}', title) or re.search(r'\d{1,2}x\d{1,2}', title))
- 
+
+# Matches:
+#  • S01E02 or s1e2       (1–2 digits for both)
+#  • 1x02 or 01x2         (1–2 digits for both, case-insensitive)
+#  • Season 1 Episode 2   (any spacing, case-insensitive)
+_HAS_EPISODE_RE = re.compile(
+    r'(?i)(?:'
+      r'S\d{1,2}E\d{1,2}'           # S01E02
+      r'|\d{1,2}x\d{1,2}'           # 1x02
+      r'|\bSeason\s*\d+\s*Episode\s*\d+\b'  # Season 1 Episode 2
+    r')'
+)
+
 def has_season_episode(scene_name: str) -> bool:
-    return bool(re.search(r"(?i)[sS]\d{2}[eE]\d{2}", scene_name))
+    """
+    Return True if the scene_name contains any recognized season/episode marker:
+      - SxxEyy
+      - MxN
+      - Season <num> Episode <num>
+    """
+    return bool(_HAS_EPISODE_RE.search(scene_name))
  
 def is_missing_title(scene_name: str, expected_title: str) -> bool:
     """
