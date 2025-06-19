@@ -442,38 +442,39 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
     conf = base_conf * (title_score ** exp)
     logging.debug(f"Score  : {conf}")
     return round(conf, 2)
+ 
+_EPISODE_TOKEN = re.compile(r"(?i)^(?:S\d{2}E\d{2}|\d{1,2}x\d{1,2})$")
 
 def extract_scene_title(scene_name: str) -> str:
     """
     1) Collapse "Season X Ep Y" → "Episode Y"
     2) Split on . - _ or whitespace
-    3) Find SxxEyy token
-    4) Collect after SxxEyy until an END_MARKER or resolution.
+    3) Find SxxEyy or MxN token
+    4) Collect title tokens until an END_MARKER or resolution.
        Accept:
          • Pure digits (e.g. "13")
-         • Any casing of the articles "a", "an", "the"
+         • Articles "a", "an", "the"
          • Single uppercase letters (e.g. "I")
-         • TitleCase words (e.g. "Night", "Out")
+         • TitleCase words (e.g. "Night")
     5) Join with spaces, return.
     """
-    # Step 0
+    # Step 0: collapse "Season <digits> Ep <digits>" → "Episode <digits>"
     scene_name = re.sub(
         r"(?i)\bSeason[.\s_-]*\d+[.\s_-]*Ep[.\s_-]*(\d+)\b",
         r"Episode \1",
         scene_name
     )
 
-    # Step 1
+    # Step 1: tokenize
     tokens = re.split(r"[.\-_\s]+", scene_name)
 
-    # Step 2
+    # Step 2: look for our episode marker
     for i, tok in enumerate(tokens):
-        if re.match(r"(?i)^S\d{2}E\d{2}$", tok):
+        if _EPISODE_TOKEN.match(tok):
             title_parts = []
             for w in tokens[i+1:]:
                 low = w.lower()
-
-                # break on markers/resolutions
+                # stop on resolution or END_MARKER
                 if low in END_MARKERS or re.match(r"^\d{3,4}p$", low):
                     break
 
@@ -487,7 +488,7 @@ def extract_scene_title(scene_name: str) -> str:
                     title_parts.append(w)
                     continue
 
-                # 3) single-letter uppercase (e.g. "I")
+                # 3) single-letter uppercase (I)
                 if len(w) == 1 and w.isalpha() and w.isupper():
                     title_parts.append(w)
                     continue
@@ -500,7 +501,8 @@ def extract_scene_title(scene_name: str) -> str:
                 # otherwise skip
             return " ".join(title_parts)
 
-    # fallback
+    # fallback if no ep-token found
+    return re.sub(r"[.\-_]+", " ", scene_name)
     return re.sub(r"[.\-_]+", " ", scene_name)
  
 def delete_episode_file(client: SonarrClient, file_id: int):
