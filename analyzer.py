@@ -445,48 +445,62 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
 
 def extract_scene_title(scene_name: str) -> str:
     """
-    1) Collapse any "Season X Ep Y" → "Episode Y"
+    1) Collapse "Season X Ep Y" → "Episode Y"
     2) Split on . - _ or whitespace
     3) Find SxxEyy token
-    4) Collect tokens after SxxEyy until an END_MARKER or resolution.
-       Accept either:
+    4) Collect after SxxEyy until an END_MARKER or resolution.
+       Accept:
+         • Pure digits (e.g. "13")
+         • Any casing of the articles "a", "an", "the"
+         • Single uppercase letters (e.g. "I")
          • TitleCase words (e.g. "Night", "Out")
-         • Pure-digit tokens (e.g. "13")
     5) Join with spaces, return.
     """
-
-    # ── Step 0: collapse "Season <digits> Ep <digits>" into "Episode <digits>"
+    # Step 0
     scene_name = re.sub(
         r"(?i)\bSeason[.\s_-]*\d+[.\s_-]*Ep[.\s_-]*(\d+)\b",
         r"Episode \1",
         scene_name
     )
 
-    # ── Step 1: split on ., -, _, or whitespace
+    # Step 1
     tokens = re.split(r"[.\-_\s]+", scene_name)
 
-    # ── Step 2: find the SxxEyy token
+    # Step 2
     for i, tok in enumerate(tokens):
         if re.match(r"(?i)^S\d{2}E\d{2}$", tok):
             title_parts = []
-            # ── Step 3: collect everything after SxxEyy until a marker
             for w in tokens[i+1:]:
                 low = w.lower()
-                # stop on resolution (e.g. "720p") or any other END_MARKER
+
+                # break on markers/resolutions
                 if low in END_MARKERS or re.match(r"^\d{3,4}p$", low):
                     break
 
-                # Accept if it’s TitleCase (e.g. “Episode”) OR pure digits (e.g. “13”)
-                if (len(w) > 1 and w[0].isupper() and w[1:].islower()) or w.isdigit():
+                # 1) digits
+                if w.isdigit():
                     title_parts.append(w)
                     continue
 
-                # Otherwise skip (e.g. “web-dl”, “AAC2.0”, etc.)
-                # Next token might still be digits, so we keep looping.
+                # 2) articles
+                if low in {"a", "an", "the"}:
+                    title_parts.append(w)
+                    continue
 
+                # 3) single-letter uppercase (e.g. "I")
+                if len(w) == 1 and w.isalpha() and w.isupper():
+                    title_parts.append(w)
+                    continue
+
+                # 4) TitleCase words
+                if len(w) > 1 and w[0].isupper() and w[1:].islower():
+                    title_parts.append(w)
+                    continue
+
+                # otherwise skip
             return " ".join(title_parts)
 
-    # ── Fallback: if no SxxEyy found, just replace punctuation with spaces
+    # fallback
     return re.sub(r"[.\-_]+", " ", scene_name)
  
 def delete_episode_file(client: SonarrClient, file_id: int):
