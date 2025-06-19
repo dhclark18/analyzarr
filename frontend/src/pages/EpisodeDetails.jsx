@@ -26,7 +26,7 @@ export default function EpisodeDetail() {
   useEffect(() => {
     setLoading(true);
     fetch(`/api/episode/${encodeURIComponent(key)}`)
-      .then(res => res.ok ? res.json() : Promise.reject(res.statusText))
+      .then(res => (res.ok ? res.json() : Promise.reject(res.statusText)))
       .then(data => setEpisode(data))
       .catch(err => setError(err.toString()))
       .finally(() => setLoading(false));
@@ -55,11 +55,12 @@ export default function EpisodeDetail() {
       .finally(() => setTagOpInProgress(false));
   };
 
-  const removeTag = (tag) => {
+  const removeTag = tag => {
     setTagOpInProgress(true);
-    fetch(`/api/episode/${encodeURIComponent(key)}/tags/${encodeURIComponent(tag)}`, {
-      method: 'DELETE'
-    })
+    fetch(
+      `/api/episode/${encodeURIComponent(key)}/tags/${encodeURIComponent(tag)}`,
+      { method: 'DELETE' }
+    )
       .then(res => {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
@@ -100,6 +101,12 @@ export default function EpisodeDetail() {
   const mi = episode.media_info || {};
   const cardStyle = { minHeight: '140px' };
 
+  // compute substring match locally
+  const normExpected = episode.norm_expected || '';
+  const normExtracted = episode.norm_extracted || '';
+  const isSubstringMatch =
+    normExtracted.includes(normExpected) && normExpected.length > 0;
+
   return (
     <Layout>
       <Container fluid className="py-4">
@@ -116,7 +123,8 @@ export default function EpisodeDetail() {
                 <Card.Title>Step 1</Card.Title>
                 <Card.Text>
                   Extract expected title:
-                  <br /><code>{episode.expectedTitle}</code>
+                  <br />
+                  <code>{episode.expectedTitle}</code>
                 </Card.Text>
               </Card.Body>
             </Card>
@@ -128,7 +136,8 @@ export default function EpisodeDetail() {
                 <Card.Title>Step 2</Card.Title>
                 <Card.Text>
                   Extract actual title:
-                  <br /><code>{episode.actualTitle}</code>
+                  <br />
+                  <code>{episode.actualTitle}</code>
                 </Card.Text>
               </Card.Body>
             </Card>
@@ -140,7 +149,8 @@ export default function EpisodeDetail() {
                 <Card.Title>Step 3</Card.Title>
                 <Card.Text>
                   Normalize expected:
-                  <br /><code>{episode.norm_expected || '—'}</code>
+                  <br />
+                  <code>{normExpected || '—'}</code>
                 </Card.Text>
               </Card.Body>
             </Card>
@@ -152,18 +162,16 @@ export default function EpisodeDetail() {
                 <Card.Title>Step 4</Card.Title>
                 <Card.Text>
                   Normalize actual:
-                  <br /><code>{episode.norm_extracted || '—'}</code>
+                  <br />
+                  <code>{normExtracted || '—'}</code>
                 </Card.Text>
               </Card.Body>
             </Card>
           </Col>
           <Col md="auto">➡️</Col>
-          <Col
-            md={2}
-            className="text-center"
-          >
+          <Col md={2} className="text-center">
             <Card
-              bg={episode.norm_expected === episode.norm_extracted ? 'success' : 'danger'}
+              bg={isSubstringMatch ? 'success' : 'danger'}
               text="white"
               style={cardStyle}
             >
@@ -172,9 +180,7 @@ export default function EpisodeDetail() {
                 <Card.Text>
                   Final Comparison:
                   <br />
-                  {episode.norm_expected === episode.norm_extracted
-                    ? '✅ Match'
-                    : '❌ Mismatch'}
+                  {isSubstringMatch ? '✅ Match' : '❌ Mismatch'}
                 </Card.Text>
               </Card.Body>
             </Card>
@@ -286,7 +292,9 @@ export default function EpisodeDetail() {
               </tr>
               <tr>
                 <th>Audio Streams</th>
-                <td>{mi.audioStreamCount != null ? mi.audioStreamCount : '–'}</td>
+                <td>
+                  {mi.audioStreamCount != null ? mi.audioStreamCount : '–'}
+                </td>
               </tr>
             </tbody>
           </Table>
