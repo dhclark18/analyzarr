@@ -107,89 +107,6 @@ export default function EpisodeDetail() {
           ← Back to Library
         </Button>
 
-        <Table striped bordered hover responsive variant="dark">
-          <tbody>
-            <tr>
-              <th>Expected Title</th>
-              <td>{episode.expectedTitle}</td>
-            </tr>
-            <tr>
-              <th>Actual Title</th>
-              <td>{episode.actualTitle}</td>
-            </tr>
-            <tr>
-              <th>Confidence</th>
-              <td>{episode.confidence}</td>
-            </tr>
-            <tr>
-              <th>Substring Override?</th>
-              <td>{episode.substring_override ? 'Yes' : 'No'}</td>
-            </tr>
-            <tr>
-              <th>Missing Title?</th>
-              <td>{episode.missing_title ? 'Yes' : 'No'}</td>
-            </tr>
-            <tr>
-              <th>Release Group</th>
-              <td>{episode.release_group || '–'}</td>
-            </tr>
-
-            {/* ─── MediaInfo Fields ─────────────────────────────────────────────────── */}
-            <tr>
-              <th>Container / Resolution</th>
-              <td>{mi.resolution || '–'}</td>
-            </tr>
-            <tr>
-              <th>Video Codec</th>
-              <td>{mi.videoCodec || '–'}</td>
-            </tr>
-            <tr>
-              <th>Video Bitrate</th>
-              <td>{mi.videoBitrate ? `${mi.videoBitrate} kbps` : '–'}</td>
-            </tr>
-            <tr>
-              <th>Video FPS</th>
-              <td>{mi.videoFps ? `${mi.videoFps} fps` : '–'}</td>
-            </tr>
-            <tr>
-              <th>Video Bit Depth</th>
-              <td>{mi.videoBitDepth != null ? mi.videoBitDepth : '–'}</td>
-            </tr>
-            <tr>
-              <th>Run Time</th>
-              <td>{mi.runTime || '–'}</td>
-            </tr>
-            <tr>
-              <th>Scan Type</th>
-              <td>{mi.scanType || '–'}</td>
-            </tr>
-            <tr>
-              <th>Subtitles</th>
-              <td>{mi.subtitles || '–'}</td>
-            </tr>
-            <tr>
-              <th>Audio Codec</th>
-              <td>{mi.audioCodec || '–'}</td>
-            </tr>
-            <tr>
-              <th>Audio Bitrate</th>
-              <td>{mi.audioBitrate ? `${mi.audioBitrate} kbps` : '–'}</td>
-            </tr>
-            <tr>
-              <th>Audio Channels</th>
-              <td>{mi.audioChannels || '–'}</td>
-            </tr>
-            <tr>
-              <th>Audio Languages</th>
-              <td>{mi.audioLanguages || '–'}</td>
-            </tr>
-            <tr>
-              <th>Audio Streams</th>
-              <td>{mi.audioStreamCount != null ? mi.audioStreamCount : '–'}</td>
-            </tr>
-          </tbody>
-        </Table>
-
         <h2 className="mt-5 mb-3">Analysis Steps</h2>
         <Row className="g-4 align-items-center justify-content-center text-center">
           <Col md={2}>
@@ -241,12 +158,19 @@ export default function EpisodeDetail() {
           </Col>
           <Col md="auto">➡️</Col>
           <Col md={2}>
-            <Card bg={episode.norm_expected === episode.norm_extracted ? 'success' : 'danger'} text="white" style={cardStyle}>
+            <Card
+              bg={episode.norm_expected === episode.norm_extracted ? 'success' : 'danger'}
+              text="white"
+              style={cardStyle}
+            >
               <Card.Body>
                 <Card.Title>Step 5</Card.Title>
                 <Card.Text>
                   Final Comparison:
-                  <br />{episode.norm_expected === episode.norm_extracted ? '✅ Match' : '❌ Mismatch'}
+                  <br />
+                  {episode.norm_expected === episode.norm_extracted
+                    ? '✅ Match'
+                    : '❌ Mismatch'}
                 </Card.Text>
               </Card.Body>
             </Card>
@@ -285,6 +209,81 @@ export default function EpisodeDetail() {
             </Button>
           </InputGroup>
         </Row>
+                  {/* ─── Additional Info Section ─────────────────────────────────────────── */}
+          <h2 className="mt-5 mb-3">Additional Information</h2>
+          <Table striped bordered hover responsive variant="dark">
+            <tbody>
+              <tr>
+                <th>Confidence</th>
+                <td>{episode.confidence}</td>
+              </tr>
+              <tr>
+                <th>Substring Override?</th>
+                <td>{episode.substring_override ? 'Yes' : 'No'}</td>
+              </tr>
+              <tr>
+                <th>Missing Title?</th>
+                <td>{episode.missing_title ? 'Yes' : 'No'}</td>
+              </tr>
+              <tr>
+                <th>Release Group</th>
+                <td>{episode.release_group || '–'}</td>
+              </tr>
+              <tr>
+                <th>Container / Resolution</th>
+                <td>{mi.resolution || '–'}</td>
+              </tr>
+              <tr>
+                <th>Video Codec</th>
+                <td>{mi.videoCodec || '–'}</td>
+              </tr>
+              <tr>
+                <th>Video Bitrate</th>
+                <td>{mi.videoBitrate ? `${mi.videoBitrate} kbps` : '–'}</td>
+              </tr>
+              <tr>
+                <th>Video FPS</th>
+                <td>{mi.videoFps ? `${mi.videoFps} fps` : '–'}</td>
+              </tr>
+              <tr>
+                <th>Video Bit Depth</th>
+                <td>{mi.videoBitDepth != null ? mi.videoBitDepth : '–'}</td>
+              </tr>
+              <tr>
+                <th>Run Time</th>
+                <td>{mi.runTime || '–'}</td>
+              </tr>
+              <tr>
+                <th>Scan Type</th>
+                <td>{mi.scanType || '–'}</td>
+              </tr>
+              <tr>
+                <th>Subtitles</th>
+                <td>{mi.subtitles || '–'}</td>
+              </tr>
+              <tr>
+                <th>Audio Codec</th>
+                <td>{mi.audioCodec || '–'}</td>
+              </tr>
+              <tr>
+                <th>Audio Bitrate</th>
+                <td>{mi.audioBitrate ? `${mi.audioBitrate} kbps` : '–'}</td>
+              </tr>
+              <tr>
+                <th>Audio Channels</th>
+                <td>{mi.audioChannels || '–'}</td>
+              </tr>
+              <tr>
+                <th>Audio Languages</th>
+                <td>{mi.audioLanguages || '–'}</td>
+              </tr>
+              <tr>
+                <th>Audio Streams</th>
+                <td>{mi.audioStreamCount != null ? mi.audioStreamCount : '–'}</td>
+              </tr>
+            </tbody>
+          </Table>
+        </div>
       </Container>
     </Layout>
   );
