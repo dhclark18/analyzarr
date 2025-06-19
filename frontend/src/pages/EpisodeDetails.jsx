@@ -107,6 +107,7 @@ export default function EpisodeDetail() {
           ← Back to Library
         </Button>
 
+        {/* Analysis Steps */}
         <h2 className="mt-5 mb-3">Analysis Steps</h2>
         <Row className="g-4 align-items-center justify-content-center text-center">
           <Col md={2}>
@@ -157,7 +158,10 @@ export default function EpisodeDetail() {
             </Card>
           </Col>
           <Col md="auto">➡️</Col>
-          <Col md={2}>
+          <Col
+            md={2}
+            className="text-center"
+          >
             <Card
               bg={episode.norm_expected === episode.norm_extracted ? 'success' : 'danger'}
               text="white"
@@ -177,6 +181,7 @@ export default function EpisodeDetail() {
           </Col>
         </Row>
 
+        {/* Tags */}
         <Row className="mt-5">
           <h2>Tags</h2>
           <div>
@@ -209,8 +214,10 @@ export default function EpisodeDetail() {
             </Button>
           </InputGroup>
         </Row>
-                  {/* ─── Additional Info Section ─────────────────────────────────────────── */}
-          <h2 className="mt-5 mb-3">Additional Information</h2>
+
+        {/* Additional Information */}
+        <div className="mt-5">
+          <h2 className="mb-3">Additional Information</h2>
           <Table striped bordered hover responsive variant="dark">
             <tbody>
               <tr>
