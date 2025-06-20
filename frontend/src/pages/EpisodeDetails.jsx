@@ -178,15 +178,15 @@ export default function EpisodeDetail() {
       content: (
         <>
           <div>
-            <strong>norm_expected:</strong><br/>
+            <strong>Normalized Expected:</strong><br/>
             <code>{normExpected}</code>
           </div>
           <div className="mt-2">
-            <strong>norm_scene:</strong><br/>
+            <strong>Normalized actual:</strong><br/>
             <code style={{ wordBreak: 'break-all' }}>{normScene}</code>
           </div>
           <div className="mt-2">
-            ✅ Expected title in file title
+            ✅ Expected title in actual title
           </div>
         </>
       )
@@ -218,7 +218,7 @@ export default function EpisodeDetail() {
           className="mb-3"
           onClick={() => navigate(-1)}
         >
-          ← Back to series
+          ← Back
         </Button>
         {/* Analysis Steps */}
         <h2 className="mt-5 mb-3">Analysis Steps</h2>
