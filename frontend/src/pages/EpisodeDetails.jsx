@@ -22,6 +22,7 @@ export default function EpisodeDetail() {
   const [error, setError] = useState(null);
   const [newTag, setNewTag] = useState('');
   const [tagOpInProgress, setTagOpInProgress] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setLoading(true);
@@ -91,12 +92,11 @@ export default function EpisodeDetail() {
         <Container className="py-4">
           <Alert variant="danger">Error: {error}</Alert>
           <Button
-            as={Link}
-            to={`/series/${encodeURIComponent(seriesSlug)}`}
             variant="outline-light"
-            className="mt-2"
+            className="mb-3"
+            onClick={() => navigate(-1)}
           >
-            ← Back to Series
+            ← Back
           </Button>
         </Container>
       </Layout>
