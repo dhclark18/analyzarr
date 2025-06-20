@@ -410,7 +410,7 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
         return 0.0
 
     # 4) Season match but no title words → base for missing title
-    if is_missing_title(scene_name, expected_title):
+    if is_missing_title(scene_name):
         logging.debug(f"Missing title")
         return 0.8
 
@@ -586,7 +586,7 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
 
     norm_scene = normalize_title(scene)
     substring_override = (norm_expected in norm_extracted)
-    missing_title      = is_missing_title(scene, expected_title)
+    missing_title      = is_missing_title(scene)
     
     release_group = epfile.get("releaseGroup", "")
     media_info    = epfile.get("mediaInfo", {}) 
