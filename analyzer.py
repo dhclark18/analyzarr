@@ -326,20 +326,6 @@ _NUMWORD = (
 NUM_RE = re.compile(
     rf"(?i)\b(?:{_NUMWORD})(?:[ \-](?:{_NUMWORD}))*\b"
 )
-# Special words to tell extract_scene_title that we have reached the end of the title (if any)
-_raw_markers = os.getenv("END_MARKERS", 
-    "1080p,720p,2160p,480p,"
-    "remux,hdtv,"
-    "dts,ddp51,ac3,vc1,x264,h264,hevc,"
-    "nf,dsnp,btn,kenobi,asmofuscated"
-)
-
-# Split on commas, strip whitespace, and lowercase each token
-END_MARKERS = {
-    token.strip().lower()
-    for token in _raw_markers.split(",")
-    if token.strip()
-}
 
 def collapse_numbers(text: str) -> str:
     """
@@ -391,34 +377,10 @@ def has_season_episode(scene_name: str) -> bool:
     """
     return bool(_HAS_EPISODE_RE.search(scene_name))
  
-def is_missing_title(scene_name: str, expected_title: str) -> bool:
-    """
-    Return True if there was no real title between SxxEyy and the metadata,
-    or if the only token is a numeric year/number that doesn’t match the expected or is just "Part X".
-    """
-    raw = extract_scene_title(scene_name).strip()
-    expected_norm = normalize_title(expected_title)
-
-    logging.debug(f"is_missing_title: raw extracted = {raw!r}, expected_norm = {expected_norm!r}")
-
-    # 1) Nothing at all
-    if not raw:
-        return True
-
-    # 2) Pure digits in the raw:
-    if raw.isdigit():
-        # 2a) expected is also digits and they match → not missing
-        if expected_norm.isdigit() and raw == expected_norm:
-            return False
-        # 2b) otherwise → missing
-        return True
-    
-    # 3) “PartX” (any casing) should also count as “missing”
-    if re.match(r'(?i)^part\d+$', raw):
-        return True
-
-    # 4) Otherwise, assume there's a real title word
-    return False
+def is_missing_title(scene_name: str) -> bool:
+    """True if extract_scene_title returns no episode title."""
+    return not bool(extract_scene_title(scene_name))
+}
 
 def compute_confidence(expected_title: str, scene_name: str) -> float:
     # 1) Normalize expected
@@ -440,8 +402,8 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
     # ───── Substring override ─────
     # If the normalized expected title literally appears in the normalized scene title, 
     # it’s a perfect match.
-    if norm_expected in norm_scene:
-        return 1.0
+    #if norm_expected in norm_scene:
+        #return 1.0
 
     # 3) No SxxEyy → no confidence
     if not has_season_episode(scene_name):
@@ -461,8 +423,6 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
     conf = base_conf * (title_score ** exp)
     logging.debug(f"Score  : {conf}")
     return round(conf, 2)
- 
-_EPISODE_TOKEN = re.compile(r"(?i)^(?:S\d{2}E\d{2}|\d{1,2}x\d{1,2})$")
 
 def extract_scene_title(scene_name: str) -> str:
     """
