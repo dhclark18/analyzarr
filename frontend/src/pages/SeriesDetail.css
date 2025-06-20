@@ -4,3 +4,11 @@
   overflow-y: auto;
   padding-right: 1rem;    /* avoid cutting off scrollbar */
 }
+.expected-link {
+  color: inherit;        /* keep the dark-mode text color */
+  text-decoration: none; /* no underline by default */
+}
+.expected-link:hover {
+  text-decoration: underline;
+  cursor: pointer;
+}
