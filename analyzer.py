@@ -20,7 +20,6 @@ from psycopg2.pool import SimpleConnectionPool
 from rapidfuzz.fuzz import token_sort_ratio
 from word2number import w2n
 import psycopg2.extras
-from guessit import guessit
 
 # -----------------------------------------------------------------------------
 # CLI & Configuration
@@ -326,6 +325,20 @@ _NUMWORD = (
 NUM_RE = re.compile(
     rf"(?i)\b(?:{_NUMWORD})(?:[ \-](?:{_NUMWORD}))*\b"
 )
+# Special words to tell extract_scene_title that we have reached the end of the title (if any)
+_raw_markers = os.getenv("END_MARKERS", 
+    "1080p,720p,2160p,480p,"
+    "remux,hdtv,"
+    "dts,ddp51,ac3,vc1,x264,h264,hevc,"
+    "nf,dsnp,btn,kenobi,asmofuscated"
+)
+
+# Split on commas, strip whitespace, and lowercase each token
+END_MARKERS = {
+    token.strip().lower()
+    for token in _raw_markers.split(",")
+    if token.strip()
+}
 
 def collapse_numbers(text: str) -> str:
     """
@@ -447,16 +460,68 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
     conf = base_conf * (title_score ** exp)
     logging.debug(f"Score  : {conf}")
     return round(conf, 2)
+ 
+_EPISODE_TOKEN = re.compile(r"(?i)^(?:S\d{2}E\d{2}|\d{1,2}x\d{1,2})$")
 
 def extract_scene_title(scene_name: str) -> str:
     """
-    Use guessit to pull out the episode title from a filename.
-    Falls back to returning '' if guessit can’t find one.
+    1) Collapse "Season X Ep Y" → "Episode Y"
+    2) Split on . - _ or whitespace
+    3) Find SxxEyy or MxN token
+    4) Collect title tokens until an END_MARKER or resolution.
+       Accept:
+         • Pure digits (e.g. "13")
+         • Articles "a", "an", "the"
+         • Single uppercase letters (e.g. "I")
+         • TitleCase words (e.g. "Night")
+    5) Join with spaces, return.
     """
-    guess = guessit(scene_name, {'type': 'episode'})
-    # guessit returns a dict with keys like 'title', 'season', 'episode'
-    title = guess.get('title') or ''
-    return title.strip()
+    # Step 0: collapse "Season <digits> Ep <digits>" → "Episode <digits>"
+    scene_name = re.sub(
+        r"(?i)\bSeason[.\s_-]*\d+[.\s_-]*Ep[.\s_-]*(\d+)\b",
+        r"Episode \1",
+        scene_name
+    )
+
+    # Step 1: tokenize
+    tokens = re.split(r"[.\-_\s]+", scene_name)
+
+    # Step 2: look for our episode marker
+    for i, tok in enumerate(tokens):
+        if _EPISODE_TOKEN.match(tok):
+            title_parts = []
+            for w in tokens[i+1:]:
+                low = w.lower()
+                # stop on resolution or END_MARKER
+                if low in END_MARKERS or re.match(r"^\d{3,4}p$", low):
+                    break
+
+                # 1) digits
+                if w.isdigit():
+                    title_parts.append(w)
+                    continue
+
+                # 2) articles
+                if low in {"a", "an", "the"}:
+                    title_parts.append(w)
+                    continue
+
+                # 3) single-letter uppercase (I)
+                if len(w) == 1 and w.isalpha() and w.isupper():
+                    title_parts.append(w)
+                    continue
+
+                # 4) TitleCase words
+                if len(w) > 1 and w[0].isupper() and w[1:].islower():
+                    title_parts.append(w)
+                    continue
+
+                # otherwise skip
+            return " ".join(title_parts)
+
+    # fallback if no ep-token found
+    return re.sub(r"[.\-_]+", " ", scene_name)
+    return re.sub(r"[.\-_]+", " ", scene_name)
  
 def delete_episode_file(client: SonarrClient, file_id: int):
     """
