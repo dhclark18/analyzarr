@@ -389,35 +389,56 @@ def has_season_episode(scene_name: str) -> bool:
       - Season <num> Episode <num>
     """
     return bool(_HAS_EPISODE_RE.search(scene_name))
- 
+
 def is_missing_title(scene_name: str, expected_title: str) -> bool:
     """
-    Return True if there was no real title between SxxEyy and the metadata,
-    or if the only token is a numeric year/number that doesn’t match the expected or is just "Part X".
+    Return True if extract_scene_title yields *only* metadata tokens
+    (digits, markers, all-caps tags, or pure parts), i.e. no real title words.
     """
     raw = extract_scene_title(scene_name).strip()
+    if not raw:
+        # absolutely nothing extracted
+        return True
+
+    # Normalize expected so we can allow exact matches even if they look numeric
     expected_norm = normalize_title(expected_title)
 
-    logging.debug(f"is_missing_title: raw extracted = {raw!r}, expected_norm = {expected_norm!r}")
+    # If the extracted raw is exactly the expected title → not missing
+    if normalize_title(raw) == expected_norm:
+        return False
 
-    # 1) Nothing at all
-    if not raw:
-        return True
+    # Iterate tokens, skipping over known‐metadata tokens
+    for tok in raw.split():
+        low = tok.lower()
 
-    # 2) Pure digits in the raw:
-    if raw.isdigit():
-        # 2a) expected is also digits and they match → not missing
-        if expected_norm.isdigit() and raw == expected_norm:
+        # 1) pure digits
+        if tok.isdigit():
+            # if expected was digits and matches
+            if low == expected_norm:
+                return False
+            continue
+
+        # 2) part tokens (Part1, Pt2)
+        if re.match(r'(?i)^part\d+$', tok):
+            continue
+
+        # 3) END_MARKERS (resolutions, codecs, tags)
+        if low in END_MARKERS:
+            continue
+
+        # 4) all‐caps metadata (DVDRIP, XVID, REMUX, etc.)
+        if tok.isalpha() and tok.isupper() and len(tok) > 1:
+            continue
+
+        # 5) articles “a”, “an”, “the” are considered real words
+        if low in {"a", "an", "the"}:
             return False
-        # 2b) otherwise → missing
-        return True
-    
-    # 3) “PartX” (any casing) should also count as “missing”
-    if re.match(r'(?i)^part\d+$', raw):
-        return True
 
-    # 4) Otherwise, assume there's a real title word
-    return False
+        # Anything else we consider a “real” title word → not missing
+        return False
+
+    # If we never returned False, it means every token was metadata → missing
+    return True
 
 def compute_confidence(expected_title: str, scene_name: str) -> float:
     # 1) Normalize expected
@@ -465,50 +486,70 @@ _EPISODE_TOKEN = re.compile(r'(?i)^(?:S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})$')
 _CAMEL_SPLIT   = re.compile(r'[A-Z][a-z]*')
 
 def extract_scene_title(scene_name: str) -> str:
-    # … your existing Season/Ep collapse and tokenization …
+    """
+    1) Collapse "Season X Ep Y" → "Episode Y"
+    2) Split on . - _ or whitespace
+    3) Find SxxEyy or MxN token
+    4) Skip any subsequent "Episode" / "Ep" + its number
+    5) Collect valid title words (digits, articles, "I", CamelCase, TitleCase)
+       until an END_MARKER or resolution
+    6) Join with spaces, return.
+    """
+    # Step 0: collapse verbose markers
+    scene_name = re.sub(
+        r"(?i)\bSeason[.\s_-]*\d+[.\s_-]*Ep[.\s_-]*(\d+)\b",
+        r"Episode \1",
+        scene_name
+    )
 
     tokens = re.split(r"[.\-_\s]+", scene_name)
     for i, tok in enumerate(tokens):
         if _EPISODE_TOKEN.match(tok):
             title_parts = []
-            for w in tokens[i+1:]:
+            idx = i+1
+
+            # 4) Skip any repeated Episode/Ep + number
+            if idx < len(tokens) and tokens[idx].lower() in {"episode", "ep"}:
+                idx += 1
+                if idx < len(tokens) and tokens[idx].isdigit():
+                    idx += 1
+
+            # 5) Now collect only real title words
+            for w in tokens[idx:]:
                 low = w.lower()
 
-                # 1) break on any known END_MARKER or resolution
+                # stop on resolution or END_MARKER
                 if low in END_MARKERS or re.match(r"^\d{3,4}p$", low):
                     break
 
-                # 2) break on all-caps release tags (e.g. REPACK, PROPER, REAL, REMUX)
-                if w.isalpha() and w.isupper() and len(w) > 1:
-                    break
-
-                # 3) keep digits
+                # 5a) digits
                 if w.isdigit():
                     title_parts.append(w)
                     continue
 
-                # 4) keep articles
-                if low in {"a","an","the"}:
+                # 5b) articles
+                if low in {"a", "an", "the"}:
                     title_parts.append(w)
                     continue
 
-                # 5) keep single-letter uppercase (I)
+                # 5c) single-letter uppercase (I)
                 if len(w) == 1 and w.isalpha() and w.isupper():
                     title_parts.append(w)
                     continue
 
-                # 6) split CamelCase (ArrivalDeparture → Arrival, Departure)
-                parts = re.findall(r'[A-Z][a-z]*', w)
+                # 5d) split CamelCase (ArrivalDeparture → Arrival, Departure)
+                parts = _CAMEL_SPLIT.findall(w)
                 if len(parts) > 1:
                     title_parts.extend(parts)
                     continue
 
-                # 7) keep normal TitleCase
+                # 5e) TitleCase words
                 if len(w) > 1 and w[0].isupper() and w[1:].islower():
                     title_parts.append(w)
                     continue
 
                 # otherwise skip
+
             return " ".join(title_parts)
 
     # fallback
