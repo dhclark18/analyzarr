@@ -389,56 +389,35 @@ def has_season_episode(scene_name: str) -> bool:
       - Season <num> Episode <num>
     """
     return bool(_HAS_EPISODE_RE.search(scene_name))
-
+ 
 def is_missing_title(scene_name: str, expected_title: str) -> bool:
     """
-    Return True if extract_scene_title yields *only* metadata tokens
-    (digits, markers, all-caps tags, or pure parts), i.e. no real title words.
+    Return True if there was no real title between SxxEyy and the metadata,
+    or if the only token is a numeric year/number that doesn’t match the expected or is just "Part X".
     """
     raw = extract_scene_title(scene_name).strip()
-    if not raw:
-        # absolutely nothing extracted
-        return True
-
-    # Normalize expected so we can allow exact matches even if they look numeric
     expected_norm = normalize_title(expected_title)
 
-    # If the extracted raw is exactly the expected title → not missing
-    if normalize_title(raw) == expected_norm:
-        return False
+    logging.debug(f"is_missing_title: raw extracted = {raw!r}, expected_norm = {expected_norm!r}")
 
-    # Iterate tokens, skipping over known‐metadata tokens
-    for tok in raw.split():
-        low = tok.lower()
+    # 1) Nothing at all
+    if not raw:
+        return True
 
-        # 1) pure digits
-        if tok.isdigit():
-            # if expected was digits and matches
-            if low == expected_norm:
-                return False
-            continue
-
-        # 2) part tokens (Part1, Pt2)
-        if re.match(r'(?i)^part\d+$', tok):
-            continue
-
-        # 3) END_MARKERS (resolutions, codecs, tags)
-        if low in END_MARKERS:
-            continue
-
-        # 4) all‐caps metadata (DVDRIP, XVID, REMUX, etc.)
-        if tok.isalpha() and tok.isupper() and len(tok) > 1:
-            continue
-
-        # 5) articles “a”, “an”, “the” are considered real words
-        if low in {"a", "an", "the"}:
+    # 2) Pure digits in the raw:
+    if raw.isdigit():
+        # 2a) expected is also digits and they match → not missing
+        if expected_norm.isdigit() and raw == expected_norm:
             return False
+        # 2b) otherwise → missing
+        return True
+    
+    # 3) “PartX” (any casing) should also count as “missing”
+    if re.match(r'(?i)^part\d+$', raw):
+        return True
 
-        # Anything else we consider a “real” title word → not missing
-        return False
-
-    # If we never returned False, it means every token was metadata → missing
-    return True
+    # 4) Otherwise, assume there's a real title word
+    return False
 
 def compute_confidence(expected_title: str, scene_name: str) -> float:
     # 1) Normalize expected
@@ -481,78 +460,67 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
     conf = base_conf * (title_score ** exp)
     logging.debug(f"Score  : {conf}")
     return round(conf, 2)
-
-_EPISODE_TOKEN = re.compile(r'(?i)^(?:S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})$')
-_CAMEL_SPLIT   = re.compile(r'[A-Z][a-z]*')
+ 
+_EPISODE_TOKEN = re.compile(r"(?i)^(?:S\d{2}E\d{2}|\d{1,2}x\d{1,2})$")
 
 def extract_scene_title(scene_name: str) -> str:
     """
     1) Collapse "Season X Ep Y" → "Episode Y"
     2) Split on . - _ or whitespace
     3) Find SxxEyy or MxN token
-    4) Skip any subsequent "Episode" / "Ep" + its number
-    5) Collect valid title words (digits, articles, "I", CamelCase, TitleCase)
-       until an END_MARKER or resolution
-    6) Join with spaces, return.
+    4) Collect title tokens until an END_MARKER or resolution.
+       Accept:
+         • Pure digits (e.g. "13")
+         • Articles "a", "an", "the"
+         • Single uppercase letters (e.g. "I")
+         • TitleCase words (e.g. "Night")
+    5) Join with spaces, return.
     """
-    # Step 0: collapse verbose markers
+    # Step 0: collapse "Season <digits> Ep <digits>" → "Episode <digits>"
     scene_name = re.sub(
         r"(?i)\bSeason[.\s_-]*\d+[.\s_-]*Ep[.\s_-]*(\d+)\b",
         r"Episode \1",
         scene_name
     )
 
+    # Step 1: tokenize
     tokens = re.split(r"[.\-_\s]+", scene_name)
+
+    # Step 2: look for our episode marker
     for i, tok in enumerate(tokens):
         if _EPISODE_TOKEN.match(tok):
             title_parts = []
-            idx = i+1
-
-            # 4) Skip any repeated Episode/Ep + number
-            if idx < len(tokens) and tokens[idx].lower() in {"episode", "ep"}:
-                idx += 1
-                if idx < len(tokens) and tokens[idx].isdigit():
-                    idx += 1
-
-            # 5) Now collect only real title words
-            for w in tokens[idx:]:
+            for w in tokens[i+1:]:
                 low = w.lower()
-
                 # stop on resolution or END_MARKER
                 if low in END_MARKERS or re.match(r"^\d{3,4}p$", low):
                     break
 
-                # 5a) digits
+                # 1) digits
                 if w.isdigit():
                     title_parts.append(w)
                     continue
 
-                # 5b) articles
+                # 2) articles
                 if low in {"a", "an", "the"}:
                     title_parts.append(w)
                     continue
 
-                # 5c) single-letter uppercase (I)
+                # 3) single-letter uppercase (I)
                 if len(w) == 1 and w.isalpha() and w.isupper():
                     title_parts.append(w)
                     continue
 
-                # 5d) split CamelCase (ArrivalDeparture → Arrival, Departure)
-                parts = _CAMEL_SPLIT.findall(w)
-                if len(parts) > 1:
-                    title_parts.extend(parts)
-                    continue
-
-                # 5e) TitleCase words
+                # 4) TitleCase words
                 if len(w) > 1 and w[0].isupper() and w[1:].islower():
                     title_parts.append(w)
                     continue
 
                 # otherwise skip
-
             return " ".join(title_parts)
 
-    # fallback
+    # fallback if no ep-token found
+    return re.sub(r"[.\-_]+", " ", scene_name)
     return re.sub(r"[.\-_]+", " ", scene_name)
  
 def delete_episode_file(client: SonarrClient, file_id: int):
