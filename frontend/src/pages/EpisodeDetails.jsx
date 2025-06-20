@@ -101,11 +101,105 @@ export default function EpisodeDetail() {
   const mi = episode.media_info || {};
   const cardStyle = { minHeight: '140px' };
 
-  // compute substring match locally
+  // pull normalized fields from the API
   const normExpected = episode.norm_expected || '';
   const normExtracted = episode.norm_extracted || '';
-  const isSubstringMatch =
-    normExtracted.includes(normExpected) && normExpected.length > 0;
+  const normScene = episode.norm_scene || '';
+
+  // compute override off of norm_scene
+  const hasSubstringOverride =
+    normExpected.length > 0 && normScene.includes(normExpected);
+
+  // build the four transform cards
+  const transformCards = [
+    {
+      key: 'step1',
+      title: 'Step 1',
+      variant: 'dark',
+      content: (
+        <>
+          Extract expected title:
+          <br />
+          <code>{episode.expectedTitle}</code>
+        </>
+      )
+    },
+    {
+      key: 'step2',
+      title: 'Step 2',
+      variant: 'dark',
+      content: (
+        <>
+          Extract actual title:
+          <br />
+          <code>{episode.actualTitle}</code>
+        </>
+      )
+    },
+    {
+      key: 'step3',
+      title: 'Step 3',
+      variant: 'dark',
+      content: (
+        <>
+          Normalize expected:
+          <br />
+          <code>{normExpected || '—'}</code>
+        </>
+      )
+    },
+    {
+      key: 'step4',
+      title: 'Step 4',
+      variant: 'dark',
+      content: (
+        <>
+          Normalize actual:
+          <br />
+          <code>{normExtracted || '—'}</code>
+        </>
+      )
+    }
+  ];
+
+  // pick exactly one decision card
+  let decisionCard;
+  if (hasSubstringOverride) {
+    decisionCard = {
+      key: 'override',
+      title: 'Substring Override',
+      variant: 'success',
+      content: (
+        <>
+          <div>
+            <strong>norm_scene:</strong>
+            <br />
+            <code style={{ wordBreak: 'break-all' }}>{normScene}</code>
+          </div>
+          <div className="mt-2">
+            ✅ “{normExpected}” found in scene
+          </div>
+        </>
+      )
+    };
+  } else if (episode.missing_title) {
+    decisionCard = {
+      key: 'missing',
+      title: 'Missing Title',
+      variant: 'warning',
+      content: '⚠️ No real title found, stopping here'
+    };
+  } else {
+    const isMatch = episode.confidence >= 0.5;
+    decisionCard = {
+      key: 'final',
+      title: 'Step 5',
+      variant: isMatch ? 'success' : 'danger',
+      content: isMatch ? '✅ Match' : '❌ Mismatch'
+    };
+  }
+
+  const analysisCards = [...transformCards, decisionCard];
 
   return (
     <Layout>
@@ -117,74 +211,19 @@ export default function EpisodeDetail() {
         {/* Analysis Steps */}
         <h2 className="mt-5 mb-3">Analysis Steps</h2>
         <Row className="g-4 align-items-center justify-content-center text-center">
-          <Col md={2}>
-            <Card bg="dark" text="light" style={cardStyle}>
-              <Card.Body>
-                <Card.Title>Step 1</Card.Title>
-                <Card.Text>
-                  Extract expected title:
-                  <br />
-                  <code>{episode.expectedTitle}</code>
-                </Card.Text>
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md="auto">➡️</Col>
-          <Col md={2}>
-            <Card bg="dark" text="light" style={cardStyle}>
-              <Card.Body>
-                <Card.Title>Step 2</Card.Title>
-                <Card.Text>
-                  Extract actual title:
-                  <br />
-                  <code>{episode.actualTitle}</code>
-                </Card.Text>
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md="auto">➡️</Col>
-          <Col md={2}>
-            <Card bg="dark" text="light" style={cardStyle}>
-              <Card.Body>
-                <Card.Title>Step 3</Card.Title>
-                <Card.Text>
-                  Normalize expected:
-                  <br />
-                  <code>{normExpected || '—'}</code>
-                </Card.Text>
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md="auto">➡️</Col>
-          <Col md={2}>
-            <Card bg="dark" text="light" style={cardStyle}>
-              <Card.Body>
-                <Card.Title>Step 4</Card.Title>
-                <Card.Text>
-                  Normalize actual:
-                  <br />
-                  <code>{normExtracted || '—'}</code>
-                </Card.Text>
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md="auto">➡️</Col>
-          <Col md={2} className="text-center">
-            <Card
-              bg={isSubstringMatch ? 'success' : 'danger'}
-              text="white"
-              style={cardStyle}
-            >
-              <Card.Body>
-                <Card.Title>Step 5</Card.Title>
-                <Card.Text>
-                  Final Comparison:
-                  <br />
-                  {isSubstringMatch ? '✅ Match' : '❌ Mismatch'}
-                </Card.Text>
-              </Card.Body>
-            </Card>
-          </Col>
+          {analysisCards.map((card, idx) => (
+            <React.Fragment key={card.key}>
+              <Col md={2}>
+                <Card bg={card.variant} text="white" style={cardStyle}>
+                  <Card.Body>
+                    <Card.Title>{card.title}</Card.Title>
+                    <Card.Text>{card.content}</Card.Text>
+                  </Card.Body>
+                </Card>
+              </Col>
+              {idx < analysisCards.length - 1 && <Col md="auto">➡️</Col>}
+            </React.Fragment>
+          ))}
         </Row>
 
         {/* Tags */}
