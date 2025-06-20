@@ -460,67 +460,64 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
     conf = base_conf * (title_score ** exp)
     logging.debug(f"Score  : {conf}")
     return round(conf, 2)
- 
-_EPISODE_TOKEN = re.compile(r"(?i)^(?:S\d{2}E\d{2}|\d{1,2}x\d{1,2})$")
+
+_EPISODE_TOKEN = re.compile(r'(?i)^(?:S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})$')
+_CAMEL_SPLIT   = re.compile(r'[A-Z][a-z]*')
 
 def extract_scene_title(scene_name: str) -> str:
-    """
-    1) Collapse "Season X Ep Y" → "Episode Y"
-    2) Split on . - _ or whitespace
-    3) Find SxxEyy or MxN token
-    4) Collect title tokens until an END_MARKER or resolution.
-       Accept:
-         • Pure digits (e.g. "13")
-         • Articles "a", "an", "the"
-         • Single uppercase letters (e.g. "I")
-         • TitleCase words (e.g. "Night")
-    5) Join with spaces, return.
-    """
-    # Step 0: collapse "Season <digits> Ep <digits>" → "Episode <digits>"
+    # 1) collapse "Season 1 Ep 2" → "Episode 2"
     scene_name = re.sub(
         r"(?i)\bSeason[.\s_-]*\d+[.\s_-]*Ep[.\s_-]*(\d+)\b",
         r"Episode \1",
         scene_name
     )
 
-    # Step 1: tokenize
+    # 2) split on dots/underscores/hyphens/spaces
     tokens = re.split(r"[.\-_\s]+", scene_name)
 
-    # Step 2: look for our episode marker
+    # 3) find the SxxEyy or MxN token
     for i, tok in enumerate(tokens):
         if _EPISODE_TOKEN.match(tok):
             title_parts = []
             for w in tokens[i+1:]:
                 low = w.lower()
-                # stop on resolution or END_MARKER
-                if low in END_MARKERS or re.match(r"^\d{3,4}p$", low):
+
+                # 4) stop on any END_MARKER or resolution
+                if any(low.startswith(m) for m in END_MARKERS) \
+                   or re.match(r"^\d{3,4}p$", low):
                     break
 
-                # 1) digits
+                # 5a) pure digits
                 if w.isdigit():
                     title_parts.append(w)
                     continue
 
-                # 2) articles
-                if low in {"a", "an", "the"}:
+                # 5b) articles any case
+                if low in {"a","an","the"}:
                     title_parts.append(w)
                     continue
 
-                # 3) single-letter uppercase (I)
-                if len(w) == 1 and w.isalpha() and w.isupper():
+                # 5c) single uppercase (I)
+                if len(w)==1 and w.isalpha() and w.isupper():
                     title_parts.append(w)
                     continue
 
-                # 4) TitleCase words
-                if len(w) > 1 and w[0].isupper() and w[1:].islower():
+                # 5d) split CamelCase into subwords (ArrivalDeparture → Arrival, Departure)
+                parts = _CAMEL_SPLIT.findall(w)
+                if len(parts) > 1:
+                    title_parts.extend(parts)
+                    continue
+
+                # 5e) TitleCase words
+                if len(w)>1 and w[0].isupper() and w[1:].islower():
                     title_parts.append(w)
                     continue
 
-                # otherwise skip
+                # everything else (CODECs, group names, etc.) gets skipped
+
             return " ".join(title_parts)
 
-    # fallback if no ep-token found
-    return re.sub(r"[.\-_]+", " ", scene_name)
+    # fallback: no ep token found → just replace punctuation with spaces
     return re.sub(r"[.\-_]+", " ", scene_name)
  
 def delete_episode_file(client: SonarrClient, file_id: int):
