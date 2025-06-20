@@ -80,7 +80,7 @@ export default function SeriesDetail() {
         </Button>
         <div className="table-wrapper">
           {Object.keys(episodesBySeason)
-            .sort((a,b) => a-b)
+            .sort((a, b) => a - b)
             .map(seasonNum => (
               <section key={seasonNum} className="season-block mb-5">
                 <h2 className="page-subtitle mb-3">Season {seasonNum}</h2>
@@ -97,17 +97,19 @@ export default function SeriesDetail() {
                   </thead>
                   <tbody>
                     {episodesBySeason[seasonNum].map(ep => (
-                      <tr key={ep.key} style={{ cursor: 'pointer' }}>
+                      <tr key={ep.key}>
                         <td>{ep.matches ? '✅' : '❌'}</td>
+                        <td>{ep.code}</td>
                         <td>
-                          <Link
+                          <Button
+                            variant="link"
+                            as={Link}
                             to={`/episode/${encodeURIComponent(ep.key)}`}
-                            className="text-decoration-none text-light"
+                            className="p-0 expected-link text-light"
                           >
-                            {ep.code}
-                          </Link>
+                            {ep.expectedTitle}
+                          </Button>
                         </td>
-                        <td>{ep.expectedTitle}</td>
                         <td>{ep.actualTitle}</td>
                         <td>{ep.confidence}</td>
                         <td>
