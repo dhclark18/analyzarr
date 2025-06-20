@@ -401,8 +401,8 @@ def compute_confidence(expected_title: str, scene_name: str) -> float:
     # ───── Substring override ─────
     # If the normalized expected title literally appears in the normalized scene title, 
     # it’s a perfect match.
-    #if norm_expected in norm_scene:
-        #return 1.0
+    if norm_expected in norm_scene:
+        return 1.0
 
     # 3) No SxxEyy → no confidence
     if not has_season_episode(scene_name):
