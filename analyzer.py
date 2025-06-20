@@ -465,59 +465,53 @@ _EPISODE_TOKEN = re.compile(r'(?i)^(?:S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})$')
 _CAMEL_SPLIT   = re.compile(r'[A-Z][a-z]*')
 
 def extract_scene_title(scene_name: str) -> str:
-    # 1) collapse "Season 1 Ep 2" → "Episode 2"
-    scene_name = re.sub(
-        r"(?i)\bSeason[.\s_-]*\d+[.\s_-]*Ep[.\s_-]*(\d+)\b",
-        r"Episode \1",
-        scene_name
-    )
+    # … your existing Season/Ep collapse and tokenization …
 
-    # 2) split on dots/underscores/hyphens/spaces
     tokens = re.split(r"[.\-_\s]+", scene_name)
-
-    # 3) find the SxxEyy or MxN token
     for i, tok in enumerate(tokens):
         if _EPISODE_TOKEN.match(tok):
             title_parts = []
             for w in tokens[i+1:]:
                 low = w.lower()
 
-                # 4) stop on any END_MARKER or resolution
-                if any(low.startswith(m) for m in END_MARKERS) \
-                   or re.match(r"^\d{3,4}p$", low):
+                # 1) break on any known END_MARKER or resolution
+                if low in END_MARKERS or re.match(r"^\d{3,4}p$", low):
                     break
 
-                # 5a) pure digits
+                # 2) break on all-caps release tags (e.g. REPACK, PROPER, REAL, REMUX)
+                if w.isalpha() and w.isupper() and len(w) > 1:
+                    break
+
+                # 3) keep digits
                 if w.isdigit():
                     title_parts.append(w)
                     continue
 
-                # 5b) articles any case
+                # 4) keep articles
                 if low in {"a","an","the"}:
                     title_parts.append(w)
                     continue
 
-                # 5c) single uppercase (I)
-                if len(w)==1 and w.isalpha() and w.isupper():
+                # 5) keep single-letter uppercase (I)
+                if len(w) == 1 and w.isalpha() and w.isupper():
                     title_parts.append(w)
                     continue
 
-                # 5d) split CamelCase into subwords (ArrivalDeparture → Arrival, Departure)
-                parts = _CAMEL_SPLIT.findall(w)
+                # 6) split CamelCase (ArrivalDeparture → Arrival, Departure)
+                parts = re.findall(r'[A-Z][a-z]*', w)
                 if len(parts) > 1:
                     title_parts.extend(parts)
                     continue
 
-                # 5e) TitleCase words
-                if len(w)>1 and w[0].isupper() and w[1:].islower():
+                # 7) keep normal TitleCase
+                if len(w) > 1 and w[0].isupper() and w[1:].islower():
                     title_parts.append(w)
                     continue
 
-                # everything else (CODECs, group names, etc.) gets skipped
-
+                # otherwise skip
             return " ".join(title_parts)
 
-    # fallback: no ep token found → just replace punctuation with spaces
+    # fallback
     return re.sub(r"[.\-_]+", " ", scene_name)
  
 def delete_episode_file(client: SonarrClient, file_id: int):
