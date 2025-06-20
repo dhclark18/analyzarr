@@ -98,6 +98,7 @@ def init_db(conn):
           expected_title    TEXT    NOT NULL,
           actual_title      TEXT    NOT NULL,
           confidence        REAL    NOT NULL DEFAULT 0.0,
+          norm_scene        TEXT    NOT NULL DEFAULT '',
           norm_expected     TEXT    NOT NULL DEFAULT '',
           norm_extracted    TEXT    NOT NULL DEFAULT '',
           substring_override BOOLEAN NOT NULL DEFAULT FALSE,
@@ -203,6 +204,7 @@ def insert_episode(
     expected_title: str,
     actual_title: str,
     confidence: float,
+    norm_scene: str,
     norm_expected: str,
     norm_extracted: str,
     substring_override: bool,
@@ -221,6 +223,7 @@ def insert_episode(
                 expected_title,
                 actual_title,
                 confidence,
+                norm_scene,
                 norm_expected,
                 norm_extracted,
                 substring_override,
@@ -232,11 +235,12 @@ def insert_episode(
             ) VALUES (
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s,
-                %s, %s, %s, %s
+                %s, %s, %s, %s, %s
             )
             ON CONFLICT (key) DO UPDATE SET
                 actual_title       = EXCLUDED.actual_title,
                 confidence         = EXCLUDED.confidence,
+                norm_scene         = EXCLUDED.norm_scene,
                 norm_expected      = EXCLUDED.norm_expected,
                 norm_extracted     = EXCLUDED.norm_extracted,
                 substring_override = EXCLUDED.substring_override,
@@ -252,6 +256,7 @@ def insert_episode(
             expected_title,
             actual_title,
             confidence,
+            norm_scene,
             norm_expected,
             norm_extracted,
             substring_override,
@@ -603,7 +608,7 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
     confidence = compute_confidence(expected_title, scene)
     
     insert_episode(
-        key, nice, code, expected_title, scene, confidence, norm_expected, norm_extracted, substring_override, missing_title, series["id"], ep["id"], release_group, media_info
+        key, nice, code, expected_title, scene, confidence, norm_scene, norm_expected, norm_extracted, substring_override, missing_title, series["id"], ep["id"], release_group, media_info
     )
 
     # On match: check for and add matched tag
