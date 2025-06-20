@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Container,
   Row,
@@ -86,7 +86,6 @@ export default function EpisodeDetail() {
   }
 
   if (error) {
-    const seriesSlug = key.split("::")[1] || "";
     return (
       <Layout>
         <Container className="py-4">
@@ -215,14 +214,12 @@ export default function EpisodeDetail() {
     <Layout>
       <Container fluid className="py-4">
         <Button
-          as={Link}
-          to={`/series/${encodeURIComponent(seriesSlug)}`}
           variant="outline-light"
           className="mb-3"
+          onClick={() => navigate(-1)}
         >
-          ← Back to Series
+          ← Back to series
         </Button>
-
         {/* Analysis Steps */}
         <h2 className="mt-5 mb-3">Analysis Steps</h2>
         <Row className="g-4 align-items-center justify-content-center text-center">
