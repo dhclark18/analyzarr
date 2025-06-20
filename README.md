@@ -10,7 +10,6 @@ This Docker-based tool verifies that downloaded episode filenames match official
 - Supports real-time directory watching.
 - Ability to only scan specific series and seasons.
 - Fuzzy matching to determine if episode titles match expected title.
-- Customizable END_MARKERS to help improve accuracy. Highly recommend adding a few extra words that commonly come right after the episode titles but cannot be named or hard coded for various reasons.
 - Purge button to remove deleted episodes or series from the database.
 
 ## Requirements
