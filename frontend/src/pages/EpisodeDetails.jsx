@@ -99,6 +99,7 @@ export default function EpisodeDetail() {
   }
 
   const mi = episode.media_info || {};
+  const seriesSlug = key.split("::")[1] || "";
   const cardStyle = { minHeight: '140px' };
 
   // pull normalized fields from the API
@@ -204,10 +205,15 @@ export default function EpisodeDetail() {
   return (
     <Layout>
       <Container fluid className="py-4">
-        <Button as={Link} to="/" variant="outline-light" className="mb-3">
-          ← Back to Library
+        <Button
+          as={Link}
+          to={`/series/${encodeURIComponent(seriesSlug)}`}
+          variant="outline-light"
+          className="mb-3"
+        >
+          ← Back to Series
         </Button>
-
+        
         {/* Analysis Steps */}
         <h2 className="mt-5 mb-3">Analysis Steps</h2>
         <Row className="g-4 align-items-center justify-content-center text-center">
