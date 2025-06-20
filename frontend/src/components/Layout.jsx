@@ -27,7 +27,7 @@ export default function Layout({ children }) {
               Episodes: {stats.totalEpisodes}
             </Nav.Item>
             <Nav.Item className="text-light me-3">
-              Seasons: {stats.totalShows}
+              Shows: {stats.totalShows}
             </Nav.Item>
             <Nav.Item className="text-light me-3">
               Mismatches: {stats.totalMismatches}
