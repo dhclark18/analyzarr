@@ -19,18 +19,21 @@ sonarr = SonarrClient(
 # ─── Main functions and routes ──────────────────────────────────
 def compute_stats():
     conn = get_conn()
-    # get dict rows
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
         SELECT
-          (SELECT COUNT(*) FROM episodes)                                                             AS "totalEpisodes",
-          (SELECT COUNT(DISTINCT CAST(SUBSTRING(code FROM '^S([0-9]{2})') AS INT)) FROM episodes)        AS "totalSeasons",
-          (SELECT COUNT(DISTINCT e.key)
+          COUNT(*)                          AS "totalEpisodes",
+          COUNT(DISTINCT series_id)         AS "totalShows",
+          (SELECT COUNT(*)
              FROM episodes e
-             JOIN episode_tags et ON e.key = et.episode_key
-             JOIN tags t ON et.tag_id = t.id AND t.name = 'problematic-episode'
-          )                                                                                            AS "totalMismatches",
-          (SELECT COUNT(*) FROM episodes WHERE missing_title = TRUE)                                    AS "totalMissingTitles"
+             JOIN episode_tags et
+               ON e.key = et.episode_key
+             JOIN tags t
+               ON et.tag_id = t.id
+              AND t.name = 'problematic-episode'
+          )                                  AS "totalMismatches",
+          COUNT(*) FILTER (WHERE missing_title) AS "totalMissingTitles"
+        FROM episodes;
     """)
     stats = cur.fetchone()   # this is now a dict
     cur.close()
