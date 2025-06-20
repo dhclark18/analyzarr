@@ -380,7 +380,6 @@ def has_season_episode(scene_name: str) -> bool:
 def is_missing_title(scene_name: str) -> bool:
     """True if extract_scene_title returns no episode title."""
     return not bool(extract_scene_title(scene_name))
-}
 
 def compute_confidence(expected_title: str, scene_name: str) -> float:
     # 1) Normalize expected
