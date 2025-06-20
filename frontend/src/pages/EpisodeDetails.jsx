@@ -124,7 +124,7 @@ export default function EpisodeDetail() {
       variant: 'dark',
       content: (
         <>
-          Extract expected title:
+          Expected title:
           <br />
           <code>{episode.expectedTitle}</code>
         </>
@@ -136,7 +136,7 @@ export default function EpisodeDetail() {
       variant: 'dark',
       content: (
         <>
-          Extract actual title:
+          Actual title:
           <br />
           <code>{episode.actualTitle}</code>
         </>
@@ -148,7 +148,7 @@ export default function EpisodeDetail() {
       variant: 'dark',
       content: (
         <>
-          Normalize expected:
+          Normalized expected:
           <br />
           <code>{normExpected || '—'}</code>
         </>
@@ -160,7 +160,7 @@ export default function EpisodeDetail() {
       variant: 'dark',
       content: (
         <>
-          Normalize actual:
+          Normalized and extracted actual:
           <br />
           <code>{normExtracted || '—'}</code>
         </>
@@ -186,7 +186,7 @@ export default function EpisodeDetail() {
             <code style={{ wordBreak: 'break-all' }}>{normScene}</code>
           </div>
           <div className="mt-2">
-            ✅ Expected title in actual title
+            ✅ Expected title in file title
           </div>
         </>
       )
