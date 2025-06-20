@@ -90,28 +90,21 @@ export default function EpisodeDetail() {
       <Layout>
         <Container className="py-4">
           <Alert variant="danger">Error: {error}</Alert>
-          <Button as={Link} to="/" variant="outline-light" className="mt-2">
-            ← Back to Library
+          <Button as={Link} to={`/series/${encodeURIComponent(key.split("::")[1] || "")}`} variant="outline-light" className="mt-2">
+            ← Back to Series
           </Button>
         </Container>
       </Layout>
     );
   }
 
-  const mi = episode.media_info || {};
+  // derive seriesSlug to link back
   const seriesSlug = key.split("::")[1] || "";
+
+  const mi = episode.media_info || {};
   const cardStyle = { minHeight: '140px' };
 
-  // pull normalized fields from the API
-  const normExpected = episode.norm_expected || '';
-  const normExtracted = episode.norm_extracted || '';
-  const normScene = episode.norm_scene || '';
-
-  // compute override off of norm_scene
-  const hasSubstringOverride =
-    normExpected.length > 0 && normScene.includes(normExpected);
-
-  // build the four transform cards
+  // Build the first four transformation cards
   const transformCards = [
     {
       key: 'step1',
@@ -145,7 +138,7 @@ export default function EpisodeDetail() {
         <>
           Normalize expected:
           <br />
-          <code>{normExpected || '—'}</code>
+          <code>{episode.norm_expected || '—'}</code>
         </>
       )
     },
@@ -157,13 +150,16 @@ export default function EpisodeDetail() {
         <>
           Normalize actual:
           <br />
-          <code>{normExtracted || '—'}</code>
+          <code>{episode.norm_extracted || '—'}</code>
         </>
       )
     }
   ];
 
-  // pick exactly one decision card
+  // Use the DB-driven substring_override flag
+  const hasSubstringOverride = episode.substring_override === true;
+
+  // Pick exactly one decision card
   let decisionCard;
   if (hasSubstringOverride) {
     decisionCard = {
@@ -171,16 +167,9 @@ export default function EpisodeDetail() {
       title: 'Substring Override',
       variant: 'success',
       content: (
-        <>
-          <div>
-            <strong>norm_scene:</strong>
-            <br />
-            <code style={{ wordBreak: 'break-all' }}>{normScene}</code>
-          </div>
-          <div className="mt-2">
-            ✅ “{normExpected}” found in scene
-          </div>
-        </>
+        <div>
+          ✅ Database flag <code>substring_override</code> is true
+        </div>
       )
     };
   } else if (episode.missing_title) {
@@ -213,7 +202,7 @@ export default function EpisodeDetail() {
         >
           ← Back to Series
         </Button>
-        
+
         {/* Analysis Steps */}
         <h2 className="mt-5 mb-3">Analysis Steps</h2>
         <Row className="g-4 align-items-center justify-content-center text-center">
