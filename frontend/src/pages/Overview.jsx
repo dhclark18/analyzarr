@@ -128,21 +128,20 @@ export default function Overview() {
         <Card bg="dark" text="light" className="mb-5">
           <Card.Body>
             <ProgressBar>
-              <ProgressBar now={pctMatches}     variant="success" key={1} />
-              <ProgressBar now={pctOverrides}  variant="info"    key={2} />
-              <ProgressBar now={pctMismatches}variant="danger"  key={3} />
-              <ProgressBar now={pctMissing}   variant="warning" key={4} />
+              <ProgressBar now={pctMatches}    variant="success" key={1}/>
+              <ProgressBar now={pctOverrides}   variant="info"    key={2}/>
+              <ProgressBar now={pctMismatches}  variant="danger"  key={3}/>
+              <ProgressBar now={pctMissing}     variant="warning" key={4}/>
             </ProgressBar>
-        
-            {/* Legend Below */}
+            
             <div className="health-legend mt-3 d-flex justify-content-center flex-wrap">
               <div className="me-4 d-flex align-items-center">
                 <span className="legend-box bg-success me-1"></span>
-                <small>Fuzzy Matches ({pctMatch}%)</small>
+                <small>Fuzzy Matches ({pctMatches}%)</small>
               </div>
               <div className="me-4 d-flex align-items-center">
                 <span className="legend-box bg-info me-1"></span>
-                <small>Perfect Matches ({pctOverride}%)</small>
+                <small>Perfect Matches ({pctOverrides}%)</small>
               </div>
               <div className="me-4 d-flex align-items-center">
                 <span className="legend-box bg-danger me-1"></span>
