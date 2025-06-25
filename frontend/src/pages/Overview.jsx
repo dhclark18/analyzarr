@@ -84,7 +84,7 @@ export default function Overview() {
           <Col xs={6} md={3}>
             <Card bg="dark" text="light" className="text-center">
               <Card.Body>
-                <Card.Title>Matched Episodes</Card.Title>
+                <Card.Title>Fuzzy Matches</Card.Title>
                 <Card.Text style={{ fontSize:'2rem' }}>{totalMatches}</Card.Text>
               </Card.Body>
             </Card>
@@ -92,7 +92,7 @@ export default function Overview() {
           <Col xs={6} md={3}>
             <Card bg="dark" text="light" className="text-center">
               <Card.Body>
-                <Card.Title>Overrides</Card.Title>
+                <Card.Title>Perfect Matches</Card.Title>
                 <Card.Text style={{ fontSize:'2rem' }}>{totalOverrides}</Card.Text>
               </Card.Body>
             </Card>
@@ -100,7 +100,7 @@ export default function Overview() {
           <Col xs={6} md={3}>
             <Card bg="dark" text="light" className="text-center">
               <Card.Body>
-                <Card.Title>Problematic</Card.Title>
+                <Card.Title>Mismatches</Card.Title>
                 <Card.Text style={{ fontSize:'2rem' }}>{totalMismatches}</Card.Text>
               </Card.Body>
             </Card>
