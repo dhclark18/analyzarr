@@ -18,7 +18,10 @@ export default function SeriesDetail() {
   const [replacing, setReplacing]             = useState({});
   const [overriding, setOverriding]           = useState({});
 
-  useEffect(() => {
+  // Helper to fetch & group episodes
+  const loadEpisodes = () => {
+    setLoading(true);
+    setError(null);
     fetch(`/api/series/${encodeURIComponent(seriesTitle)}/episodes`)
       .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
       .then(data => {
@@ -29,8 +32,12 @@ export default function SeriesDetail() {
         }, {});
         setEpisodesBySeason(grouped);
       })
-      .catch(err => setError(err))
+      .catch(err => setError(err.toString()))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadEpisodes();
   }, [seriesTitle]);
 
   const replaceEpisode = (key) => {
@@ -44,7 +51,10 @@ export default function SeriesDetail() {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
       })
-      .then(() => window.location.reload())
+      .then(() => {
+        setReplacing(prev => ({ ...prev, [key]: false }));
+        loadEpisodes();
+      })
       .catch(err => {
         console.error(err);
         setReplacing(prev => ({ ...prev, [key]: false }));
@@ -53,7 +63,6 @@ export default function SeriesDetail() {
 
   const overrideEpisode = (key) => {
     setOverriding(prev => ({ ...prev, [key]: true }));
-    // 1) add the 'override' tag
     fetch(`/api/episode/${encodeURIComponent(key)}/tags`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -61,7 +70,6 @@ export default function SeriesDetail() {
     })
       .then(res => {
         if (!res.ok) throw new Error(res.statusText);
-        // 2) remove the 'problematic-episode' tag
         return fetch(
           `/api/episode/${encodeURIComponent(key)}/tags/problematic-episode`,
           { method: 'DELETE' }
@@ -71,7 +79,10 @@ export default function SeriesDetail() {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
       })
-      .then(() => window.location.reload())
+      .then(() => {
+        setOverriding(prev => ({ ...prev, [key]: false }));
+        loadEpisodes();
+      })
       .catch(err => {
         console.error(err);
         setOverriding(prev => ({ ...prev, [key]: false }));
