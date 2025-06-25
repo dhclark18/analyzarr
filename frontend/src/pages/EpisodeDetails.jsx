@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate }      from 'react-router-dom';
 import {
   Container,
   Row,
@@ -17,39 +17,42 @@ import Layout from '../components/Layout';
 
 export default function EpisodeDetail() {
   const { key } = useParams();
-  const [episode, setEpisode] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [newTag, setNewTag] = useState('');
-  const [tagOpInProgress, setTagOpInProgress] = useState(false);
   const navigate = useNavigate();
+
+  const [episode, setEpisode]       = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [newTag, setNewTag]         = useState('');
+  const [tagOpInProgress, setTagOpInProgress] = useState(false);
+
+  // tags that should not be added/removed via the UI
+  const protectedTags = ['matched', 'problematic-episode', 'override'];
 
   useEffect(() => {
     setLoading(true);
     fetch(`/api/episode/${encodeURIComponent(key)}`)
-      .then(res => (res.ok ? res.json() : Promise.reject(res.statusText)))
+      .then(res => res.ok ? res.json() : Promise.reject(res.statusText))
       .then(data => setEpisode(data))
       .catch(err => setError(err.toString()))
       .finally(() => setLoading(false));
   }, [key]);
 
   const addTag = () => {
-    if (!newTag.trim()) return;
+    const tag = newTag.trim();
+    if (!tag || protectedTags.includes(tag)) return;
+
     setTagOpInProgress(true);
     fetch(`/api/episode/${encodeURIComponent(key)}/tags`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tag: newTag.trim() })
+      body: JSON.stringify({ tag })
     })
       .then(res => {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
       })
-      .then(() => {
-        setEpisode(prev => ({
-          ...prev,
-          tags: [...(prev.tags || []), newTag.trim()]
-        }));
+      .then(({ tags }) => {
+        setEpisode(prev => ({ ...prev, tags }));
         setNewTag('');
       })
       .catch(err => setError(err.toString()))
@@ -57,6 +60,8 @@ export default function EpisodeDetail() {
   };
 
   const removeTag = tag => {
+    if (protectedTags.includes(tag)) return;
+
     setTagOpInProgress(true);
     fetch(
       `/api/episode/${encodeURIComponent(key)}/tags/${encodeURIComponent(tag)}`,
@@ -66,11 +71,8 @@ export default function EpisodeDetail() {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
       })
-      .then(() => {
-        setEpisode(prev => ({
-          ...prev,
-          tags: prev.tags.filter(t => t !== tag)
-        }));
+      .then(({ tags }) => {
+        setEpisode(prev => ({ ...prev, tags }));
       })
       .catch(err => setError(err.toString()))
       .finally(() => setTagOpInProgress(false));
@@ -85,7 +87,6 @@ export default function EpisodeDetail() {
       </Layout>
     );
   }
-
   if (error) {
     return (
       <Layout>
@@ -93,7 +94,7 @@ export default function EpisodeDetail() {
           <Alert variant="danger">Error: {error}</Alert>
           <Button
             variant="outline-light"
-            className="mb-3"
+            className="mt-2"
             onClick={() => navigate(-1)}
           >
             ← Back
@@ -103,72 +104,61 @@ export default function EpisodeDetail() {
     );
   }
 
-  // derive seriesSlug to link back
-  const seriesSlug = key.split("::")[1] || "";
   const mi = episode.media_info || {};
   const cardStyle = { minHeight: '140px' };
 
-  // normalized values from the API
-  const normExpected = episode.norm_expected || '';
+  // normalized values
+  const normExpected  = episode.norm_expected  || '';
   const normExtracted = episode.norm_extracted || '';
-  const normScene = episode.norm_scene || '';
-
-  // trust the DB flag
+  const normScene     = episode.norm_scene     || '';
   const hasSubstringOverride = episode.substring_override === true;
+  const isMatch = episode.confidence >= 0.5;
 
-  // build the first four transformation cards
+  // build transform cards
   const transformCards = [
     {
-      key: 'step1',
-      title: 'Step 1',
-      variant: 'dark',
+      key: 'step1', title: 'Step 1', variant: 'dark',
       content: (
         <>
           Expected title:
-          <br />
+          <br/>
           <code>{episode.expectedTitle}</code>
         </>
       )
     },
     {
-      key: 'step2',
-      title: 'Step 2',
-      variant: 'dark',
+      key: 'step2', title: 'Step 2', variant: 'dark',
       content: (
         <>
           Actual title:
-          <br />
+          <br/>
           <code>{episode.actualTitle}</code>
         </>
       )
     },
     {
-      key: 'step3',
-      title: 'Step 3',
-      variant: 'dark',
+      key: 'step3', title: 'Step 3', variant: 'dark',
       content: (
         <>
           Normalized expected:
-          <br />
+          <br/>
           <code>{normExpected || '—'}</code>
         </>
       )
     },
     {
-      key: 'step4',
-      title: 'Step 4',
-      variant: 'dark',
+      key: 'step4', title: 'Step 4', variant: 'dark',
       content: (
         <>
-          Normalized and extracted actual:
-          <br />
+          Normalized actual:
+          <br/>
           <code>{normExtracted || '—'}</code>
         </>
       )
     }
   ];
 
-  // pick exactly one decision card
+  // pick decision card
   let decisionCard;
   if (hasSubstringOverride) {
     decisionCard = {
@@ -178,16 +168,14 @@ export default function EpisodeDetail() {
       content: (
         <>
           <div>
-            <strong>Normalized Expected:</strong><br/>
+            <strong>Normalized expected:</strong><br/>
             <code>{normExpected}</code>
           </div>
           <div className="mt-2">
-            <strong>Normalized actual:</strong><br/>
+            <strong>Normalized scene:</strong><br/>
             <code style={{ wordBreak: 'break-all' }}>{normScene}</code>
           </div>
-          <div className="mt-2">
-            ✅ Expected title in actual title
-          </div>
+          <div className="mt-2">✅ Expected title in actual title</div>
         </>
       )
     };
@@ -199,7 +187,6 @@ export default function EpisodeDetail() {
       content: '⚠️ No real title found, stopping here'
     };
   } else {
-    const isMatch = episode.confidence >= 0.5;
     decisionCard = {
       key: 'final',
       title: 'Step 5',
@@ -220,6 +207,7 @@ export default function EpisodeDetail() {
         >
           ← Back
         </Button>
+
         {/* Analysis Steps */}
         <h2 className="mt-5 mb-3">Analysis Steps</h2>
         <Row className="g-4 align-items-center justify-content-center text-center">
@@ -245,13 +233,18 @@ export default function EpisodeDetail() {
             {(episode.tags || []).map(tag => (
               <Badge
                 key={tag}
-                bg="secondary"
+                bg={protectedTags.includes(tag) ? 'secondary' : 'primary'}
                 pill
                 className="me-1"
-                style={{ cursor: 'pointer' }}
-                onClick={() => !tagOpInProgress && removeTag(tag)}
+                style={{ cursor: protectedTags.includes(tag) ? 'default' : 'pointer' }}
+                onClick={() =>
+                  !protectedTags.includes(tag) &&
+                  !tagOpInProgress &&
+                  removeTag(tag)
+                }
               >
-                {tag} ×
+                {tag}
+                {!protectedTags.includes(tag) && ' ×'}
               </Badge>
             ))}
           </div>
@@ -265,7 +258,11 @@ export default function EpisodeDetail() {
             <Button
               variant="outline-light"
               onClick={addTag}
-              disabled={tagOpInProgress || !newTag.trim()}
+              disabled={
+                tagOpInProgress ||
+                !newTag.trim() ||
+                protectedTags.includes(newTag.trim())
+              }
             >
               Add
             </Button>
