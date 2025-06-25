@@ -22,3 +22,10 @@
 .navbar .navbar-brand:hover {
   color: var(--color-primary-light) !important;  /* lighter orange on hover */
 }
+
+.health-legend .legend-box {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+}
