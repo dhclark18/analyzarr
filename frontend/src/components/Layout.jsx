@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Navbar, Nav } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import './Layout.css';
 
 export default function Layout({ children }) {
   const [stats, setStats] = useState({
     totalEpisodes: 0,
-    totalSeasons: 0,
+    totalShows: 0,
     totalMismatches: 0,
     totalMissingTitles: 0
   });
@@ -43,10 +44,25 @@ export default function Layout({ children }) {
         <Row>
           <Col xs="auto" className="sidebar p-0">
             <Nav className="flex-column bg-dark vh-100">
-              <Nav.Link href="/" className="text-light">
+              <Nav.Link
+                as={Link}
+                to="/overview"
+                className="text-light"
+              >
+                Overview
+              </Nav.Link>
+              <Nav.Link
+                as={Link}
+                to="/"
+                className="text-light"
+              >
                 Dashboard
               </Nav.Link>
-              <Nav.Link href="/settings" className="text-light">
+              <Nav.Link
+                as={Link}
+                to="/settings"
+                className="text-light"
+              >
                 Settings
               </Nav.Link>
             </Nav>
