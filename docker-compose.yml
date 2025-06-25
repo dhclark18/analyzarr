@@ -3,7 +3,7 @@ services:
   analyzarr:
     image: dhclark18/analyzarr:latest
     ports:
-      - "3000:80"
+      - "3030:80"
     environment:
       SONARR_URL: http://[sonarr_ip]:8989
       SONARR_API_KEY: [sonarr api key]
