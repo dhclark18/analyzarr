@@ -22,8 +22,17 @@ def compute_stats():
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
         SELECT
-          COUNT(*)                          AS "totalEpisodes",
-          COUNT(DISTINCT series_id)         AS "totalShows",
+          COUNT(*)                            AS "totalEpisodes",
+          COUNT(DISTINCT series_id)           AS "totalShows",
+          COUNT(*) FILTER (WHERE substring_override) 
+                                              AS "totalOverrides",
+          COUNT(*) FILTER (WHERE missing_title) 
+                                              AS "totalMissingTitles",
+          COUNT(*) FILTER (
+            WHERE confidence >= 0.5
+              AND NOT substring_override
+              AND NOT missing_title
+          )                                   AS "totalMatches",
           (SELECT COUNT(*)
              FROM episodes e
              JOIN episode_tags et
@@ -31,11 +40,11 @@ def compute_stats():
              JOIN tags t
                ON et.tag_id = t.id
               AND t.name = 'problematic-episode'
-          )                                  AS "totalMismatches",
-          COUNT(*) FILTER (WHERE missing_title) AS "totalMissingTitles"
+          )                                   AS "totalMismatches",
+          ROUND(AVG(confidence)::numeric, 2)  AS "avgConfidence"
         FROM episodes;
     """)
-    stats = cur.fetchone()   # this is now a dict
+    stats = cur.fetchone()
     cur.close()
     conn.close()
     return stats
