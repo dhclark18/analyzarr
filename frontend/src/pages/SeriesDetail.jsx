@@ -16,6 +16,7 @@ export default function SeriesDetail() {
   const [loading, setLoading]                 = useState(true);
   const [error, setError]                     = useState(null);
   const [replacing, setReplacing]             = useState({});
+  const [overriding, setOverriding]           = useState({});
 
   useEffect(() => {
     fetch(`/api/series/${encodeURIComponent(seriesTitle)}/episodes`)
@@ -39,15 +40,42 @@ export default function SeriesDetail() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key })
     })
-    .then(res => {
-      if (!res.ok) throw new Error(res.statusText);
-      return res.json();
+      .then(res => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
+      .then(() => window.location.reload())
+      .catch(err => {
+        console.error(err);
+        setReplacing(prev => ({ ...prev, [key]: false }));
+      });
+  };
+
+  const overrideEpisode = (key) => {
+    setOverriding(prev => ({ ...prev, [key]: true }));
+    // 1) add the 'override' tag
+    fetch(`/api/episode/${encodeURIComponent(key)}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag: 'override' })
     })
-    .then(() => window.location.reload())
-    .catch(err => {
-      console.error(err);
-      setReplacing(prev => ({ ...prev, [key]: false }));
-    });
+      .then(res => {
+        if (!res.ok) throw new Error(res.statusText);
+        // 2) remove the 'problematic-episode' tag
+        return fetch(
+          `/api/episode/${encodeURIComponent(key)}/tags/problematic-episode`,
+          { method: 'DELETE' }
+        );
+      })
+      .then(res => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
+      .then(() => window.location.reload())
+      .catch(err => {
+        console.error(err);
+        setOverriding(prev => ({ ...prev, [key]: false }));
+      });
   };
 
   if (loading) {
@@ -114,14 +142,25 @@ export default function SeriesDetail() {
                         <td>{ep.confidence}</td>
                         <td>
                           {!ep.matches && (
-                            <Button
-                              variant="warning"
-                              size="sm"
-                              disabled={replacing[ep.key]}
-                              onClick={() => replaceEpisode(ep.key)}
-                            >
-                              {replacing[ep.key] ? 'Replacing…' : 'Replace'}
-                            </Button>
+                            <>
+                              <Button
+                                variant="warning"
+                                size="sm"
+                                disabled={replacing[ep.key]}
+                                onClick={() => replaceEpisode(ep.key)}
+                                className="me-2"
+                              >
+                                {replacing[ep.key] ? 'Replacing…' : 'Replace'}
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                disabled={overriding[ep.key]}
+                                onClick={() => overrideEpisode(ep.key)}
+                              >
+                                {overriding[ep.key] ? 'Overriding…' : 'Override'}
+                              </Button>
+                            </>
                           )}
                         </td>
                       </tr>
