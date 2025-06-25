@@ -128,11 +128,31 @@ export default function Overview() {
         <Card bg="dark" text="light" className="mb-5">
           <Card.Body>
             <ProgressBar>
-              <ProgressBar now={pctMatches}   label={`Matched ${pctMatches}%`}   variant="success" key={1}/>
-              <ProgressBar now={pctOverrides} label={`Overrides ${pctOverrides}%`} variant="info"    key={2}/>
-              <ProgressBar now={pctMismatches}label={`Problematic ${pctMismatches}%`}variant="danger" key={3}/>
-              <ProgressBar now={pctMissing}   label={`Missing ${pctMissing}%`}   variant="warning" key={4}/>
+              <ProgressBar now={pctFuzzy_Match}     variant="success" key={1} />
+              <ProgressBar now={pctPerfect_Match}  variant="info"    key={2} />
+              <ProgressBar now={pctMismatches}variant="danger"  key={3} />
+              <ProgressBar now={pctMissing}   variant="warning" key={4} />
             </ProgressBar>
+        
+            {/* Legend Below */}
+            <div className="health-legend mt-3 d-flex justify-content-center flex-wrap">
+              <div className="me-4 d-flex align-items-center">
+                <span className="legend-box bg-success me-1"></span>
+                <small>Matched ({pctMatch}%)</small>
+              </div>
+              <div className="me-4 d-flex align-items-center">
+                <span className="legend-box bg-info me-1"></span>
+                <small>Overrides ({pctOverride}%)</small>
+              </div>
+              <div className="me-4 d-flex align-items-center">
+                <span className="legend-box bg-danger me-1"></span>
+                <small>Problematic ({pctMismatches}%)</small>
+              </div>
+              <div className="d-flex align-items-center">
+                <span className="legend-box bg-warning me-1"></span>
+                <small>Missing ({pctMissing}%)</small>
+              </div>
+            </div>
           </Card.Body>
         </Card>
 
