@@ -56,7 +56,7 @@ export default function Layout({ children }) {
                 to="/"
                 className="text-light"
               >
-                Dashboard
+                Library
               </Nav.Link>
               <Nav.Link
                 as={Link}
