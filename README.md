@@ -6,11 +6,12 @@ This Docker-based tool verifies that downloaded episode filenames match official
 
 - Auto-checks episode filenames against TVDb
 - Creates database containing various parameters for each episode.
-- Webpage that presents rich statistics, details, and provides user with ability to control aspects of library.
+- Web GUI that presents rich statistics, details, and provides user with ability to control aspects of library.
 - Supports real-time directory watching.
 - Ability to only scan specific series and seasons.
 - Fuzzy matching to determine if episode titles match expected title.
 - Detailed information about each episode file.
+- Breakdown of analyzarr logic for each episode
 
 ## Requirements
 
@@ -20,7 +21,7 @@ This Docker-based tool verifies that downloaded episode filenames match official
 
 1. Create new docker stack using provided docker-compose.yml and modify variables as needed (including END_MARKERS).
 2. Run stack for first time.
-3. Go to http://[your ip address]:3030 to see breakdown of results. Could take a couple of seconds to fully scan library depending on size. 
+3. Go to http://[your ip address]:3030 (or whatever you specified in the docker compose) to access web GUI. Could take a couple of seconds to fully scan library depending on size. 
 
 ## Disclaimer
 
