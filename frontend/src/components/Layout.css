@@ -2,7 +2,7 @@
 .sidebar {
   background-color: var(--color-sidebar-bg);
   position: sticky;
-  /* Two navbars × 56px height each */
+  
   top: calc(40px * 2);
   height: calc(100vh - (40px * 2));
   overflow-y: auto;
