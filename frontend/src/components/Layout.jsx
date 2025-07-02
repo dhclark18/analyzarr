@@ -63,7 +63,7 @@ export default function Layout({ children }) {
             {/* Secondary navbar now here, flush to sidebar */}
             <Navbar variant="dark" className="navbar-secondary mb-0 px-3">
               <Nav>
-                #blank
+                stuff
               </Nav>
             </Navbar>
 
