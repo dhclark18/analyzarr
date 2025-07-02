@@ -44,17 +44,7 @@ export default function Layout({ children }) {
       {/* Secondary site‐nav bar */}
       <Navbar bg="dark" variant="dark" className="navbar-secondary">
         <Container fluid>
-          <Nav>
-            <Nav.Link as={Link} to="/overview" className="text-light">
-              Overview
-            </Nav.Link>
-            <Nav.Link as={Link} to="/" className="text-light">
-              Dashboard
-            </Nav.Link>
-            <Nav.Link as={Link} to="/settings" className="text-light">
-              Settings
-            </Nav.Link>
-          </Nav>
+        #blank for now
         </Container>
       </Navbar>
 
