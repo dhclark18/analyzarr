@@ -20,7 +20,8 @@ export default function Layout({ children }) {
 
   return (
     <>
-      <Navbar bg="dark" variant="dark" className="mb-3">
+      {/* Top‐level stats bar */}
+      <Navbar bg="dark" variant="dark" className="mb-0">
         <Container fluid>
           <Navbar.Brand>Analyzarr</Navbar.Brand>
           <Nav className="ms-auto">
@@ -40,29 +41,34 @@ export default function Layout({ children }) {
         </Container>
       </Navbar>
 
+      {/* Secondary site‐nav bar */}
+      <Navbar bg="secondary" variant="dark" className="mb-3">
+        <Container fluid>
+          <Nav>
+            <Nav.Link as={Link} to="/overview" className="text-light">
+              Overview
+            </Nav.Link>
+            <Nav.Link as={Link} to="/" className="text-light">
+              Dashboard
+            </Nav.Link>
+            <Nav.Link as={Link} to="/settings" className="text-light">
+              Settings
+            </Nav.Link>
+          </Nav>
+        </Container>
+      </Navbar>
+
       <Container fluid>
         <Row>
           <Col xs="auto" className="sidebar p-0">
             <Nav className="flex-column bg-dark vh-100">
-              <Nav.Link
-                as={Link}
-                to="/overview"
-                className="text-light"
-              >
+              <Nav.Link as={Link} to="/overview" className="text-light">
                 Overview
               </Nav.Link>
-              <Nav.Link
-                as={Link}
-                to="/"
-                className="text-light"
-              >
-                Library
+              <Nav.Link as={Link} to="/" className="text-light">
+                Dashboard
               </Nav.Link>
-              <Nav.Link
-                as={Link}
-                to="/settings"
-                className="text-light"
-              >
+              <Nav.Link as={Link} to="/settings" className="text-light">
                 Settings
               </Nav.Link>
             </Nav>
