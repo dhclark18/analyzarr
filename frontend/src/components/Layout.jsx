@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Navbar, Nav } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import './layout.css';  // ensure this is imported
+import './Layout.css';  // ensure this is imported
 
 export default function Layout({ children }) {
   const [stats, setStats] = useState({
