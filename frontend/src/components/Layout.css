@@ -1,16 +1,25 @@
+/* Sidebar styling */
 .sidebar {
   background-color: var(--color-sidebar-bg);
+  position: sticky;
+  /* Two navbars × 56px height each */
+  top: calc(56px * 2);
+  height: calc(100vh - (56px * 2));
+  overflow-y: auto;
 }
 
+/* Sidebar links */
 .sidebar .nav-link {
   color: var(--color-sidebar-text);
 }
 
+/* Sidebar link hover: keep same text color on hover for readability */
 .sidebar .nav-link:hover {
   background-color: var(--color-sidebar-hover);
-  color: var(--color-text);
+  color: var(--color-sidebar-text);
 }
 
+/* Primary navbar (stats bar) */
 .navbar {
   background-color: var(--color-navbar-bg) !important;
 }
@@ -20,9 +29,26 @@
 }
 
 .navbar .navbar-brand:hover {
-  color: var(--color-primary-light) !important;  /* lighter orange on hover */
+  color: var(--color-primary-light) !important;
 }
 
+/* Secondary navbar (site nav) */
+.navbar-secondary {
+  background-color: var(--color-sidebar-bg) !important;
+}
+
+.navbar-secondary .navbar-brand,
+.navbar-secondary .navbar-nav .nav-link {
+  color: var(--color-sidebar-text) !important;
+}
+
+/* Secondary navbar hover matches sidebar hover */
+.navbar-secondary .navbar-brand:hover,
+.navbar-secondary .navbar-nav .nav-link:hover {
+  color: var(--color-sidebar-hover) !important;
+}
+
+/* Health legend box */
 .health-legend .legend-box {
   display: inline-block;
   width: 1rem;
