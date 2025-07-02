@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Navbar, Nav } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import './Layout.css';
+import './layout.css';  // ensure this is imported
 
 export default function Layout({ children }) {
   const [stats, setStats] = useState({
     totalEpisodes: 0,
-    totalShows: 0,
+    totalShows:    0,
     totalMismatches: 0,
     totalMissingTitles: 0
   });
@@ -15,12 +15,12 @@ export default function Layout({ children }) {
     fetch('/api/stats')
       .then(res => res.ok ? res.json() : Promise.reject(res.statusText))
       .then(data => setStats(data))
-      .catch(err => console.error('Failed to load stats:', err));
+      .catch(console.error);
   }, []);
 
   return (
     <>
-      {/* Top‐level stats bar */}
+      {/* Primary top‐level stats bar */}
       <Navbar bg="dark" variant="dark" className="mb-0">
         <Container fluid>
           <Navbar.Brand>Analyzarr</Navbar.Brand>
@@ -41,17 +41,11 @@ export default function Layout({ children }) {
         </Container>
       </Navbar>
 
-      {/* Secondary site‐nav bar */}
-      <Navbar bg="dark" variant="dark" className="navbar-secondary">
-        <Container fluid>
-        #blank for now
-        </Container>
-      </Navbar>
-
-      <Container fluid>
-        <Row>
-          <Col xs="auto" className="sidebar p-0">
-            <Nav className="flex-column bg-dark vh-100">
+      <Container fluid className="p-0">
+        <Row className="g-0">
+          {/* Sidebar */}
+          <Col xs="auto" className="sidebar">
+            <Nav className="flex-column pt-3">
               <Nav.Link as={Link} to="/overview" className="text-light">
                 Overview
               </Nav.Link>
@@ -63,8 +57,19 @@ export default function Layout({ children }) {
               </Nav.Link>
             </Nav>
           </Col>
-          <Col className="main-content p-3">
-            {children}
+
+          {/* Main content */}
+          <Col className="main-col">
+            {/* Secondary navbar now here, flush to sidebar */}
+            <Navbar variant="dark" className="navbar-secondary mb-0 px-3">
+              <Nav>
+                {/* you can add secondary nav links here as needed */}
+              </Nav>
+            </Navbar>
+
+            <div className="main-content p-3">
+              {children}
+            </div>
           </Col>
         </Row>
       </Container>
