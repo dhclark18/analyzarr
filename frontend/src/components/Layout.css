@@ -3,27 +3,6 @@
   --navbar-height: 56px;
 }
 
-/* Reset any extra padding/margins on the sidebar nav */
-.sidebar .nav {
-  margin: 0;
-  padding: 0;
-}
-
-/* Make each link the full navbar height and center its content */
-.sidebar .nav-link {
-  height: var(--navbar-height);
-  display: flex;
-  align-items: center;
-  padding-left: 1rem; /* or whatever horizontal padding you prefer */
-  color: var(--color-sidebar-text);
-}
-
-/* Hover state remains the same */
-.sidebar .nav-link:hover {
-  background-color: var(--color-sidebar-hover);
-  color: var(--color-sidebar-text);
-}
-
 /* Sidebar sticks immediately under the primary navbar */
 .sidebar {
   background-color: var(--color-sidebar-bg);
