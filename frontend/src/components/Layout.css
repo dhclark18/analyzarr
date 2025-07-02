@@ -1,10 +1,14 @@
-/* Sidebar styling */
+/* 56px is Bootstrap’s default navbar height */
+:root {
+  --navbar-height: 56px;
+}
+
+/* Sidebar sticks immediately under the primary navbar */
 .sidebar {
   background-color: var(--color-sidebar-bg);
   position: sticky;
-  
-  top: calc(40px * 2);
-  height: calc(100vh - (40px * 2));
+  top: var(--navbar-height);
+  height: calc(100vh - var(--navbar-height));
   overflow-y: auto;
 }
 
@@ -12,41 +16,38 @@
 .sidebar .nav-link {
   color: var(--color-sidebar-text);
 }
-
-/* Sidebar link hover: keep same text color on hover for readability */
 .sidebar .nav-link:hover {
   background-color: var(--color-sidebar-hover);
   color: var(--color-sidebar-text);
 }
 
-/* Primary navbar (stats bar) */
+/* Primary navbar */
 .navbar {
   background-color: var(--color-navbar-bg) !important;
 }
 
-.navbar .navbar-brand {
-  color: var(--color-navbar-brand) !important;
-}
-
-.navbar .navbar-brand:hover {
-  color: var(--color-primary-light) !important;
-}
-
-/* Secondary navbar (site nav) */
+/* Secondary navbar sits at top of main column */
 .navbar-secondary {
   background-color: var(--color-sidebar-bg) !important;
-  margin-bottom: 0 !important;
 }
-
-.navbar-secondary .navbar-brand,
-.navbar-secondary .navbar-nav .nav-link {
+.navbar-secondary .nav-link, 
+.navbar-secondary .navbar-brand {
   color: var(--color-sidebar-text) !important;
 }
-
-/* Secondary navbar hover matches sidebar hover */
-.navbar-secondary .navbar-brand:hover,
-.navbar-secondary .navbar-nav .nav-link:hover {
+.navbar-secondary .nav-link:hover,
+.navbar-secondary .navbar-brand:hover {
   color: var(--color-sidebar-hover) !important;
+}
+
+/* Ensure main column content scrolls under the secondary navbar */
+.main-col {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--navbar-height));
+}
+.main-col .main-content {
+  overflow-y: auto;
+  flex: 1;
 }
 
 /* Health legend box */
