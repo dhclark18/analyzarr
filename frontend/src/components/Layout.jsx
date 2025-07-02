@@ -42,7 +42,7 @@ export default function Layout({ children }) {
       </Navbar>
 
       {/* Secondary site‐nav bar */}
-      <Navbar bg="dark" variant="dark" className="navbar-secondary mb-3">
+      <Navbar bg="dark" variant="dark" className="navbar-secondary">
         <Container fluid>
           <Nav>
             <Nav.Link as={Link} to="/overview" className="text-light">
