@@ -58,6 +58,7 @@ def replace_episode():
     """
     Expects JSON { key: <string> } where key is your episodes.key.
     Looks up series_id & episode_id in the DB, then calls grab_best_nzb.
+    After replacement, triggers analyzer.py for that series (and season if known).
     """
     data = request.get_json() or {}
     key = data.get("key")
@@ -68,7 +69,7 @@ def replace_episode():
     conn = get_conn()
     cur  = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
-      SELECT series_id, episode_id
+      SELECT series_id, episode_id, code
         FROM episodes
        WHERE key = %s
     """, (key,))
@@ -81,10 +82,22 @@ def replace_episode():
 
     try:
         grab_best_nzb(sonarr, row["series_id"], row["episode_id"])
-        return jsonify({ "status": "ok" }), 200
     except Exception as e:
         return jsonify({ "error": str(e) }), 500
 
+    # ─── Optional: parse season number from code (e.g. S02E03) ────────────────
+    import re, subprocess
+    season_match = re.match(r"S(\d{2})E\d{2}", row["code"] or "")
+    season_num = int(season_match.group(1)) if season_match else None
+
+    # ─── Trigger analyzer in the background for just this show/season ────────
+    cmd = ["python3", "/app/analyzer.py", "--series-id", str(row["series_id"])]
+    if season_num:
+        cmd += ["--season", str(season_num)]
+
+    subprocess.Popen(cmd)
+
+    return jsonify({ "status": "replace triggered", "series_id": row["series_id"], "season": season_num }), 202
 def compute_mismatch_counts():
     """
     Returns a list of { seriesTitle: str, count: int }
