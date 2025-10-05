@@ -21,6 +21,7 @@ from rapidfuzz.fuzz import token_sort_ratio
 from word2number import w2n
 import psycopg2.extras
 from guessit import guessit
+import argparse
 
 # -----------------------------------------------------------------------------
 # CLI & Configuration
@@ -630,14 +631,37 @@ def check_episode(client: SonarrClient, series: dict, ep: dict):
         return
 
 
-def scan_library(client: SonarrClient):
-    for series in client.get("series") or []:
+def scan_library(client: SonarrClient, series_id: int = None, season: int = None):
+    """
+    If series_id is provided, only scan that show.
+    If season is provided, restrict to that season.
+    Otherwise, scan the entire Sonarr library.
+    """
+    series_list = []
+    if series_id:
+        series = client.get(f"series/{series_id}")
+        if not series:
+            logging.error(f"❌ No series found for ID {series_id}")
+            return
+        series_list = [series]
+    else:
+        series_list = client.get("series") or []
+
+    for series in series_list:
         if TVDB_FILTER and str(series.get("tvdbId")) != TVDB_FILTER:
             continue
+
         logging.info(f"\n=== Scanning {series['title']} ===")
-        for ep in client.get(f"episode?seriesId={series['id']}") or []:
+
+        episodes = client.get(f"episode?seriesId={series['id']}") or []
+
+        for ep in episodes:
+            # apply filters if needed
+            if season and ep["seasonNumber"] != season:
+                continue
             if SEASON_FILTER and ep["seasonNumber"] not in SEASON_FILTER:
                 continue
+
             try:
                 check_episode(client, series, ep)
             except Exception:
@@ -648,11 +672,18 @@ def scan_library(client: SonarrClient):
 # Entrypoint
 # -----------------------------------------------------------------------------
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Analyze Sonarr library or a single show/season")
+    parser.add_argument("--series-id", type=int, help="Sonarr series ID to scan")
+    parser.add_argument("--season", type=int, help="Season number to scan (optional)")
+    return parser.parse_args()
+ 
 if __name__ == "__main__":
     try:
+        args = parse_args()
         init_db()
         sonarr = SonarrClient(SONARR_URL, SONARR_API_KEY, timeout=API_TIMEOUT)
-        scan_library(sonarr)
+        scan_library(sonarr, series_id=args.series_id, season=args.season)
     except Exception:
         logging.critical("💥 Unhandled exception, shutting down", exc_info=True)
         sys.exit(1)
