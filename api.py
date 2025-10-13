@@ -298,6 +298,7 @@ def get_conn():
     )
 
 @app.route("/api/episodes/replace-async", methods=["POST"])
+@app.route("/api/episodes/replace-async", methods=["POST"])
 def replace_episode_async():
     data = request.get_json() or {}
     key = data.get("key")
