@@ -1,20 +1,21 @@
 # watcher.py
+import os
 import time
 from watchdog.observers.polling import PollingObserver as Observer
 from watchdog.events import FileSystemEventHandler
 from jobs import start_library_scan_job, append_log, update_job
 
-WATCH_PATHS = ["/media/tv", "/media/movies"]  # adjust as needed
+# ─── Read watch paths from environment variables ───────────────────────────
+WATCH_PATHS = os.environ.get("WATCH_PATHS", "/media/tv").split(":")  # use ":" as delimiter
+WATCH_PATHS = [p for p in WATCH_PATHS if os.path.exists(p)]
+
+if not WATCH_PATHS:
+    print("No valid watch paths exist. Exiting.")
+    exit(1)
 
 def run_library_scan(job_id, append_log, update_job):
-    """
-    This function will be called by the shared job system.
-    Replace the following with your actual library scan logic.
-    You can use append_log(job_id, "message") to report progress.
-    """
     try:
         append_log(job_id, "Starting library scan...")
-        # Example: scan folders
         for i, path in enumerate(WATCH_PATHS):
             append_log(job_id, f"Scanning {path}...")
             time.sleep(2)  # simulate scan delay
@@ -26,16 +27,10 @@ def run_library_scan(job_id, append_log, update_job):
 
 
 class WatcherHandler(FileSystemEventHandler):
-    """
-    Watches directories for changes and triggers a library scan job.
-    """
-
     def on_created(self, event):
         self.trigger_scan(event)
-
     def on_deleted(self, event):
         self.trigger_scan(event)
-
     def on_modified(self, event):
         self.trigger_scan(event)
 
@@ -50,6 +45,8 @@ if __name__ == "__main__":
     handler = WatcherHandler()
     for path in WATCH_PATHS:
         observer.schedule(handler, path, recursive=True)
+        append_log("system", f"Watching {path}")
+
     observer.start()
     try:
         while True:
