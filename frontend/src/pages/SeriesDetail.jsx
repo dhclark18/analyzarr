@@ -35,7 +35,7 @@ export default function SeriesDetail() {
     // set initial job state
     setJobs(prev => ({ ...prev, [key]: { status: 'queued', progress: 0, message: 'Queued' } }));
     try {
-      const res = await fetch('/api/episodes/replace-job', {
+      const res = await fetch('/api/episodes/replace-async', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key })
