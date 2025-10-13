@@ -1,85 +1,59 @@
-#!/usr/bin/env python3
-import os
+# watcher.py
 import time
-import logging
+from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from watchdog.observers.polling import PollingObserver as Observer  # polling works better for NFS
-from jobs import start_library_scan_job  # trigger scans via shared job system
+from jobs import start_library_scan_job, append_log, update_job
 
-# ─── Configuration ─────────────────────────────────────────────
-WATCH_DIR = os.getenv("WATCH_DIR", "/watched")
-COOLDOWN_SECONDS = int(os.getenv("CHECK_COOLDOWN", "60"))
+WATCH_PATHS = ["/media/tv", "/media/movies"]  # adjust as needed
 
-LOG_DIR = os.getenv("LOG_PATH", "/logs")
-os.makedirs(LOG_DIR, exist_ok=True)
+def run_library_scan(job_id, append_log, update_job):
+    """
+    This function will be called by the shared job system.
+    Replace the following with your actual library scan logic.
+    You can use append_log(job_id, "message") to report progress.
+    """
+    try:
+        append_log(job_id, "Starting library scan...")
+        # Example: scan folders
+        for i, path in enumerate(WATCH_PATHS):
+            append_log(job_id, f"Scanning {path}...")
+            time.sleep(2)  # simulate scan delay
+            update_job(job_id, progress=5 + int((i + 1) / len(WATCH_PATHS) * 80))
+        append_log(job_id, "Library scan finished successfully")
+    except Exception as e:
+        append_log(job_id, f"Error during scan: {e}")
+        update_job(job_id, status="error", message="Scan failed")
 
-# ─── Logging setup ────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(os.path.join(LOG_DIR, "watcher.log")),
-        logging.StreamHandler()
-    ]
-)
 
-last_run = 0
+class WatcherHandler(FileSystemEventHandler):
+    """
+    Watches directories for changes and triggers a library scan job.
+    """
 
-# ─── Filesystem event handler ─────────────────────────────────
-class ChangeHandler(FileSystemEventHandler):
     def on_created(self, event):
-        if event.is_directory:
-            return
-        logging.info(f"📁 Created: {event.src_path}")
-        self.trigger_check(ignore_cooldown=True)
-
-    def on_modified(self, event):
-        if event.is_directory:
-            return
-        logging.info(f"✏️ Modified: {event.src_path}")
-        self.trigger_check()
-
-    def on_moved(self, event):
-        if event.is_directory:
-            return
-        logging.info(f"🔀 Moved: {event.src_path} → {event.dest_path}")
-        self.trigger_check(ignore_cooldown=True)
+        self.trigger_scan(event)
 
     def on_deleted(self, event):
-        if event.is_directory:
-            return
-        logging.info(f"❌ Deleted: {event.src_path}")
-        self.trigger_check()
+        self.trigger_scan(event)
 
-    def trigger_check(self, ignore_cooldown=False):
-        global last_run
-        now = time.time()
-        if ignore_cooldown or (now - last_run) > COOLDOWN_SECONDS:
-            last_run = now
-            job_id = start_library_scan_job()
-            logging.info(f"🔁 Change detected — triggered library scan job {job_id}")
-        else:
-            logging.info("⏳ Cooldown active, skipping check.")
+    def on_modified(self, event):
+        self.trigger_scan(event)
 
-# ─── Main watcher loop ────────────────────────────────────────
-def main():
-    logging.info("🚀 Running initial library scan on startup...")
-    job_id = start_library_scan_job()
-    logging.info(f"Triggered initial library scan job {job_id}")
+    def trigger_scan(self, event):
+        append_log("system", f"Detected change: {event.src_path}")
+        job_id = start_library_scan_job(run_library_scan, description=f"Scan triggered by change: {event.src_path}")
+        append_log(job_id, f"Library scan job {job_id} enqueued")
 
-    logging.info(f"👀 Watching directory (polling): {WATCH_DIR}")
-    handler = ChangeHandler()
-    observer = Observer(timeout=1)  # poll every second
-    observer.schedule(handler, WATCH_DIR, recursive=True)
-    observer.start()
-
-    try:
-        while True:
-            time.sleep(5)
-    except KeyboardInterrupt:
-        logging.info("🛑 Stopping watcher…")
-        observer.stop()
-    observer.join()
 
 if __name__ == "__main__":
-    main()
+    observer = Observer()
+    handler = WatcherHandler()
+    for path in WATCH_PATHS:
+        observer.schedule(handler, path, recursive=True)
+    observer.start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
