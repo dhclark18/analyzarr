@@ -305,7 +305,6 @@ def get_conn():
         os.environ['DATABASE_URL'],
         cursor_factory=RealDictCursor
     )
-
 @app.route("/api/episodes/replace-async", methods=["POST"])
 def replace_episode_async():
     data = request.get_json() or {}
@@ -313,32 +312,7 @@ def replace_episode_async():
     if not key:
         return jsonify({"error": "key required"}), 400
 
-    job_id = start_replace_job(key)
-
-    def job_func():
-        try:
-            append_log(job_id, "Starting replace job…")
-            update_job(job_id, status="running", progress=0)
-
-            # fetch episode info
-            conn = get_conn()
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT series_id, episode_id, code FROM episodes WHERE key = %s", (key,))
-            row = cur.fetchone()
-            cur.close()
-            conn.close()
-
-            if not row:
-                raise ValueError("Episode not found")
-
-@app.route("/api/episodes/replace-async", methods=["POST"])
-def replace_episode_async():
-    data = request.get_json() or {}
-    key = data.get("key")
-    if not key:
-        return jsonify({"error": "key required"}), 400
-
-    # create job
+    # Create the job record
     job_id = start_replace_job(key)
 
     def job_func():
@@ -346,7 +320,7 @@ def replace_episode_async():
             append_log(job_id, "Replace job started")
             update_job(job_id, status="running", progress=5)
 
-            # get episode info
+            # Fetch episode info from DB
             conn = get_conn()
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("SELECT series_id, episode_id, code FROM episodes WHERE key = %s", (key,))
@@ -358,48 +332,48 @@ def replace_episode_async():
                 raise ValueError("Episode not found in database")
 
             series_id = row["series_id"]
-            episode_id = row.get("episode_id")
+            episode_id = row["episode_id"]
 
-            # Parse SxxEyy code
+            # Parse code for season/episode numbers (SxxEyy)
             import re
-            m = re.match(r"S(\d{2})E(\d{2})", row["code"] or "")
-            if not m:
-                raise ValueError(f"Invalid episode code format: {row['code']}")
-            season_number = int(m.group(1))
-            episode_number = int(m.group(2))
+            match = re.match(r"S(\d{2})E(\d{2})", row["code"] or "")
+            if not match:
+                raise ValueError(f"Invalid episode code: {row['code']}")
+            season_number = int(match.group(1))
+            episode_number = int(match.group(2))
 
-            append_log(job_id, f"Episode parsed: Series {series_id}, S{season_number:02}E{episode_number:02}")
+            append_log(job_id, f"Processing S{season_number:02}E{episode_number:02} for series {series_id}")
 
-            # Grab NZB
-            append_log(job_id, "Requesting new NZB from indexers...")
+            # Request NZB download via Sonarr
+            append_log(job_id, "Requesting best NZB from Sonarr...")
             grab_best_nzb(sonarr, series_id, episode_id)
-            update_job(job_id, progress=35, message="NZB requested from Sonarr")
+            update_job(job_id, progress=35, message="NZB requested")
 
-            # ✅ WAIT FOR SONARR IMPORT
-            append_log(job_id, "Waiting for Sonarr to import the episode...")
+            # Wait for Sonarr import to complete
+            append_log(job_id, "Waiting for Sonarr import...")
             wait_for_sonarr_import(
                 sonarr_client=sonarr,
                 series_id=series_id,
                 season_number=season_number,
                 episode_number=episode_number,
-                episode_id=episode_id,  # now supported!
+                episode_id=episode_id,
                 job_id=job_id,
                 timeout=300
             )
 
-            # Trigger analyzer
-            append_log(job_id, "Triggering analyzer for updated season...")
+            # Trigger analyzer refresh for that series/season
+            append_log(job_id, "Triggering analyzer re-scan...")
             import subprocess
             cmd = ["python3", "/app/analyzer.py", "--series-id", str(series_id), "--season", str(season_number)]
             subprocess.Popen(cmd)
+
             update_job(job_id, progress=100, status="done", message="Replace complete")
             append_log(job_id, "✅ Replace job finished successfully")
 
         except Exception as e:
             update_job(job_id, status="error", message=str(e))
-            append_log(job_id, f"❌ ERROR: {e}")
+            append_log(job_id, f"❌ Error: {e}")
 
-    # Run async
     import threading
     threading.Thread(target=job_func, daemon=True).start()
 
