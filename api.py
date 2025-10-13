@@ -6,7 +6,16 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify, abort
 from analyzer import grab_best_nzb, SonarrClient
-from jobs import start_replace_job, get_job, jobs, jobs_lock, append_log, update_job, wait_for_sonarr_import
+from jobs import (
+    start_replace_job,
+    get_job,
+    jobs,
+    jobs_lock,
+    append_log,
+    update_job,
+    wait_for_sonarr_import,
+    start_library_scan_job
+)
 
 # ─── create the Flask app first ───────────────────────────────────────────
 app = Flask(__name__)
