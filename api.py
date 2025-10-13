@@ -304,23 +304,46 @@ def replace_episode_async():
     if not key:
         return jsonify({"error": "key required"}), 400
 
-    conn = get_conn()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT series_id, episode_id FROM episodes WHERE key = %s", (key,))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-
-    if not row or not row.get("series_id") or not row.get("episode_id"):
-        return jsonify({"error": "no series/episode IDs for key"}), 404
-
     job_id = start_replace_job(key)
 
     def job_func():
         try:
             append_log(job_id, "Starting replace job…")
+            update_job(job_id, status="running", progress=0)
+
+            # fetch episode info
+            conn = get_conn()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT series_id, episode_id, code FROM episodes WHERE key = %s", (key,))
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+
+            if not row:
+                raise ValueError("Episode not found")
+
+            # grab the NZB
+            append_log(job_id, "Downloading replacement NZB…")
             grab_best_nzb(sonarr, row["series_id"], row["episode_id"])
-            wait_for_sonarr_import(sonarr, row["series_id"], row["episode_id"], job_id=job_id, timeout=300)
+            update_job(job_id, progress=50)
+
+            # wait for Sonarr to import the episode
+            wait_for_sonarr_import(sonarr, row["series_id"], row["episode_id"], job_id=job_id)
+            update_job(job_id, progress=80)
+
+            # trigger analyzer
+            append_log(job_id, "Triggering analyzer…")
+            import subprocess
+            cmd = ["python3", "/app/analyzer.py", "--series-id", str(row["series_id"])]
+            import re
+            season_match = re.match(r"S(\d{2})E\d{2}", row["code"] or "")
+            if season_match:
+                cmd += ["--season", str(int(season_match.group(1)))]
+            subprocess.Popen(cmd)
+
+            update_job(job_id, status="done", progress=100, message="Replace complete")
+            append_log(job_id, "Replace job finished successfully")
+
         except Exception as e:
             append_log(job_id, f"Error: {e}")
             update_job(job_id, status="error", message=str(e))
