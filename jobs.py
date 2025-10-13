@@ -184,3 +184,39 @@ def _job_worker(job_id, ep_key):
     except Exception as e:
         _append_log(job_id, f"Unhandled job error: {e}")
         _set(job_id, status="error", message="Unhandled error")
+
+def start_library_scan_job():
+    """
+    Start a background job that runs the analyzer on the whole library.
+    Returns job_id immediately.
+    """
+    job_id = str(uuid.uuid4())
+    create_job_record(job_id, {
+        "status": "queued",
+        "progress": 0,
+        "message": "Queued library scan",
+        "log": [],
+        "type": "library_scan"
+    })
+
+    def _worker():
+        try:
+            _set(job_id, status="running", progress=5, message="Running library scan...")
+            _append_log(job_id, "Launching analyzer for full library")
+            cmd = ["python3", "/app/analyzer.py"]  # full library scan
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=int(os.environ.get("ANALYZER_TIMEOUT", "3600")))
+            _append_log(job_id, f"Analyzer stdout: {p.stdout[:2000]}")
+            if p.returncode != 0:
+                _append_log(job_id, f"Analyzer returned rc={p.returncode} stderr: {p.stderr[:2000]}")
+                _set(job_id, status="error", message="Library scan failed", progress=95)
+                return
+            _append_log(job_id, "Library scan finished successfully.")
+            _set(job_id, progress=100, message="Library scan complete")
+            _set(job_id, status="done")
+        except Exception as e:
+            _append_log(job_id, f"Library scan failed: {e}")
+            _set(job_id, status="error", message="Library scan failed")
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    return job_id
