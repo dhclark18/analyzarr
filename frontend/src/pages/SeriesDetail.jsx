@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link }           from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
   Container,
   Table,
@@ -7,16 +7,17 @@ import {
   Alert,
   Button
 } from 'react-bootstrap';
-import Layout                          from '../components/Layout';
+import Layout from '../components/Layout';
 import './SeriesDetail.css';
 
 export default function SeriesDetail() {
   const { seriesTitle } = useParams();
   const [episodesBySeason, setEpisodesBySeason] = useState({});
-  const [loading, setLoading]                 = useState(true);
-  const [error, setError]                     = useState(null);
-  const [replacing, setReplacing]             = useState({});
-  const [overriding, setOverriding]           = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [replacing, setReplacing] = useState({});
+  const [overriding, setOverriding] = useState({});
+  const [jobs, setJobs] = useState({});
 
   // Helper to fetch & group episodes
   const loadEpisodes = () => {
@@ -40,25 +41,40 @@ export default function SeriesDetail() {
     loadEpisodes();
   }, [seriesTitle]);
 
-  const replaceEpisode = (key) => {
-    setReplacing(prev => ({ ...prev, [key]: true }));
-    fetch('/api/episodes/replace', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.json();
-      })
-      .then(() => {
-        setReplacing(prev => ({ ...prev, [key]: false }));
-        loadEpisodes();
-      })
-      .catch(err => {
-        console.error(err);
-        setReplacing(prev => ({ ...prev, [key]: false }));
+  // Async Replace with job polling
+  const replaceEpisodeAsync = async (key) => {
+    setJobs(prev => ({ ...prev, [key]: { status: 'queued', progress: 0, message: 'Queued...' } }));
+
+    try {
+      const res = await fetch('/api/episodes/replace-async', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
       });
+      if (!res.ok) throw new Error(res.statusText);
+      const { job_id } = await res.json();
+
+      // Poll job status
+      const poll = setInterval(async () => {
+        const r = await fetch(`/api/job-status/${job_id}`);
+        if (!r.ok) {
+          clearInterval(poll);
+          setJobs(prev => ({ ...prev, [key]: { status: 'error', message: 'Job not found', progress: 0 } }));
+          return;
+        }
+        const job = await r.json();
+        setJobs(prev => ({ ...prev, [key]: job }));
+
+        if (job.status === 'done' || job.status === 'error') {
+          clearInterval(poll);
+          loadEpisodes(); // refresh table after analyzer finishes
+        }
+      }, 2000);
+
+    } catch (err) {
+      console.error(err);
+      setJobs(prev => ({ ...prev, [key]: { status: 'error', message: err.toString(), progress: 0 } }));
+    }
   };
 
   const overrideEpisode = (key) => {
@@ -98,6 +114,7 @@ export default function SeriesDetail() {
       </Layout>
     );
   }
+
   if (error) {
     return (
       <Layout>
@@ -152,25 +169,38 @@ export default function SeriesDetail() {
                         <td>{ep.actualTitle}</td>
                         <td>{ep.confidence}</td>
                         <td>
-                          {!ep.matches && (
+                          {jobs[ep.key] ? (
+                            <div>
+                              {jobs[ep.key].message || 'Running...'} ({jobs[ep.key].progress || 0}%)
+                              {jobs[ep.key].log && jobs[ep.key].log.length > 0 && (
+                                <small className="d-block text-muted" style={{ whiteSpace: 'pre-wrap' }}>
+                                  {jobs[ep.key].log.slice(-5).join('\n')}
+                                </small>
+                              )}
+                            </div>
+                          ) : (
                             <>
-                              <Button
-                                variant="warning"
-                                size="sm"
-                                disabled={replacing[ep.key]}
-                                onClick={() => replaceEpisode(ep.key)}
-                                className="me-2"
-                              >
-                                {replacing[ep.key] ? 'Replacing…' : 'Replace'}
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                disabled={overriding[ep.key]}
-                                onClick={() => overrideEpisode(ep.key)}
-                              >
-                                {overriding[ep.key] ? 'Overriding…' : 'Override'}
-                              </Button>
+                              {!ep.matches && (
+                                <>
+                                  <Button
+                                    variant="warning"
+                                    size="sm"
+                                    disabled={replacing[ep.key]}
+                                    onClick={() => replaceEpisodeAsync(ep.key)}
+                                    className="me-2"
+                                  >
+                                    {replacing[ep.key] ? 'Replacing…' : 'Replace'}
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    disabled={overriding[ep.key]}
+                                    onClick={() => overrideEpisode(ep.key)}
+                                  >
+                                    {overriding[ep.key] ? 'Overriding…' : 'Override'}
+                                  </Button>
+                                </>
+                              )}
                             </>
                           )}
                         </td>
