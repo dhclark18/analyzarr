@@ -299,15 +299,35 @@ def get_conn():
 
 @app.route("/api/episodes/replace-async", methods=["POST"])
 def replace_episode_async():
-    """
-    New endpoint: enqueue replace operation as a background job and return job_id.
-    Expects JSON { key: <string> } (same as your existing replace endpoint).
-    """
     data = request.get_json() or {}
     key = data.get("key")
     if not key:
         return jsonify({"error": "key required"}), 400
+
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT series_id, episode_id FROM episodes WHERE key = %s", (key,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not row or not row.get("series_id") or not row.get("episode_id"):
+        return jsonify({"error": "no series/episode IDs for key"}), 404
+
     job_id = start_replace_job(key)
+
+    def job_func():
+        try:
+            append_log(job_id, "Starting replace job…")
+            grab_best_nzb(sonarr, row["series_id"], row["episode_id"])
+            wait_for_sonarr_import(sonarr, row["series_id"], row["episode_id"], job_id=job_id, timeout=300)
+        except Exception as e:
+            append_log(job_id, f"Error: {e}")
+            update_job(job_id, status="error", message=str(e))
+
+    import threading
+    threading.Thread(target=job_func, daemon=True).start()
+
     return jsonify({"job_id": job_id}), 202
 
 @app.route("/api/job-status/<job_id>", methods=["GET"])
