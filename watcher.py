@@ -1,6 +1,6 @@
 # watcher.py
 import time
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver as Observer
 from watchdog.events import FileSystemEventHandler
 from jobs import start_library_scan_job, append_log, update_job
 
