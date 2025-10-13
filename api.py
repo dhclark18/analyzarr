@@ -6,6 +6,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify, abort
 from analyzer import grab_best_nzb, SonarrClient
+from jobs import start_replace_job, get_job
 
 # ─── create the Flask app first ───────────────────────────────────────────
 app = Flask(__name__)
@@ -295,6 +296,56 @@ def get_conn():
         os.environ['DATABASE_URL'],
         cursor_factory=RealDictCursor
     )
+
+@app.route("/api/episodes/replace-async", methods=["POST"])
+def replace_episode_async():
+    """
+    New endpoint: enqueue replace operation as a background job and return job_id.
+    Expects JSON { key: <string> } (same as your existing replace endpoint).
+    """
+    data = request.get_json() or {}
+    key = data.get("key")
+    if not key:
+        return jsonify({"error": "key required"}), 400
+    job_id = start_replace_job(key)
+    return jsonify({"job_id": job_id}), 202
+
+@app.route("/api/job-status/<job_id>", methods=["GET"])
+def api_job_status(job_id):
+    job = get_job(job_id)
+    if not job:
+        return jsonify({"error": "job not found"}), 404
+    # Return recent subset
+    return jsonify({
+        "status": job.get("status"),
+        "progress": job.get("progress"),
+        "message": job.get("message"),
+        "log": job.get("log", [])[-50:],
+        "episode_key": job.get("episode_key")
+    })
+
+@app.route("/api/episodes/get_by_key", methods=["GET"])
+def api_episodes_get_by_key():
+    """
+    Internal helper used by worker to fetch series_id/episode_id and code for a given key.
+    Query param: ?key=...
+    """
+    key = request.args.get("key")
+    if not key:
+        return jsonify({"error": "key required"}), 400
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+      SELECT series_id, episode_id, code
+        FROM episodes
+       WHERE key = %s
+    """, (key,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(row)
     
 if __name__ == '__main__':
     # serve on all interfaces on port 5001
