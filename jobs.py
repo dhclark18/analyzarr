@@ -180,27 +180,37 @@ def _library_scan_worker(job_id, scan_function):
         append_log(job_id, f"Library scan error: {e}")
         update_job(job_id, status="error", message="Scan failed")
 
-def wait_for_sonarr_import(sonarr: SonarrClient, series_id: int, episode_id: int, job_id=None, timeout=300, poll_interval=5):
+def wait_for_sonarr_import(sonarr_client, series_id, episode_id, job_id=None, timeout=300, poll_interval=5):
     """
-    Poll Sonarr until the episode has been imported (hasFile=True) or timeout.
+    Polls Sonarr until the episode is present in the series library.
     Updates the job progress if job_id is provided.
+
+    :param sonarr_client: an instance of SonarrClient
+    :param series_id: Sonarr series ID
+    :param episode_id: Sonarr episode ID
+    :param job_id: optional, background job ID to report progress
+    :param timeout: max seconds to wait
+    :param poll_interval: seconds between polls
     """
     start = time.time()
-    if job_id:
-        append_log(job_id, "Waiting for Sonarr to import the episode…")
-        update_job(job_id, status="running", progress=50, message="Waiting for Sonarr import")
-
-    while time.time() - start < timeout:
-        ep = sonarr.get_episode(series_id, episode_id)
-        if ep and ep.get("hasFile"):
+    while True:
+        try:
+            # fetch episode info from Sonarr
+            ep = sonarr_client.get_episode(episode_id)
+            if ep and ep.get("hasFile"):
+                # imported successfully
+                if job_id:
+                    update_job(job_id, progress=90, message="Episode imported into Sonarr")
+                return True
+        except Exception as e:
+            # sometimes Sonarr might fail; just retry
             if job_id:
-                append_log(job_id, "Episode successfully imported by Sonarr")
-                update_job(job_id, status="done", progress=100, message="Episode imported")
-            return True
-        time.sleep(poll_interval)
+                append_log(job_id, f"Sonarr check failed, retrying… ({e})")
 
-    # Timeout
-    if job_id:
-        append_log(job_id, "Timeout waiting for Sonarr import")
-        update_job(job_id, status="error", progress=0, message="Timed out waiting for Sonarr import")
-    return False
+        elapsed = time.time() - start
+        if elapsed > timeout:
+            if job_id:
+                append_log(job_id, "Timeout waiting for Sonarr import")
+            raise TimeoutError(f"Episode {episode_id} not imported after {timeout} seconds")
+
+        time.sleep(poll_interval)
