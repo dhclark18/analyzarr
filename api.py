@@ -346,7 +346,16 @@ def api_episodes_get_by_key():
     if not row:
         return jsonify({"error": "not found"}), 404
     return jsonify(row)
-    
+
+@app.route("/api/library-scan-status")
+def library_scan_status():
+    with jobs_lock:
+        running_jobs = [job for job in jobs.values() if job.get("status") == "running" and job.get("type") == "library_scan"]
+        return jsonify({
+            "running": len(running_jobs) > 0,
+            "jobs": running_jobs
+        })
+        
 if __name__ == '__main__':
     # serve on all interfaces on port 5001
     app.run(host='0.0.0.0', port=5001)
