@@ -338,14 +338,15 @@ def replace_episode_async():
     if not key:
         return jsonify({"error": "key required"}), 400
 
+    # create job
     job_id = start_replace_job(key)
 
     def job_func():
         try:
-            append_log(job_id, "Starting replace job…")
-            update_job(job_id, status="running", progress=0)
+            append_log(job_id, "Replace job started")
+            update_job(job_id, status="running", progress=5)
 
-            # fetch episode info
+            # get episode info
             conn = get_conn()
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("SELECT series_id, episode_id, code FROM episodes WHERE key = %s", (key,))
@@ -354,9 +355,12 @@ def replace_episode_async():
             conn.close()
 
             if not row:
-                raise ValueError("Episode not found")
+                raise ValueError("Episode not found in database")
 
-            # Extract season/episode from code
+            series_id = row["series_id"]
+            episode_id = row.get("episode_id")
+
+            # Parse SxxEyy code
             import re
             m = re.match(r"S(\d{2})E(\d{2})", row["code"] or "")
             if not m:
@@ -364,38 +368,38 @@ def replace_episode_async():
             season_number = int(m.group(1))
             episode_number = int(m.group(2))
 
-            append_log(job_id, f"Parsed as Season {season_number}, Episode {episode_number}")
+            append_log(job_id, f"Episode parsed: Series {series_id}, S{season_number:02}E{episode_number:02}")
 
-            # Download NZB
-            append_log(job_id, "Downloading NZB from indexers…")
-            grab_best_nzb(sonarr, row["series_id"], row["episode_id"])
-            update_job(job_id, progress=50)
+            # Grab NZB
+            append_log(job_id, "Requesting new NZB from indexers...")
+            grab_best_nzb(sonarr, series_id, episode_id)
+            update_job(job_id, progress=35, message="NZB requested from Sonarr")
 
-            # ✅ Wait for Sonarr import using jobs.py version
-            append_log(job_id, "Waiting for Sonarr to import file…")
+            # ✅ WAIT FOR SONARR IMPORT
+            append_log(job_id, "Waiting for Sonarr to import the episode...")
             wait_for_sonarr_import(
                 sonarr_client=sonarr,
-                series_id=row["series_id"],
+                series_id=series_id,
                 season_number=season_number,
                 episode_number=episode_number,
+                episode_id=episode_id,  # now supported!
                 job_id=job_id,
                 timeout=300
             )
-            update_job(job_id, progress=80)
 
             # Trigger analyzer
-            append_log(job_id, "Triggering analyzer recheck…")
+            append_log(job_id, "Triggering analyzer for updated season...")
             import subprocess
-            cmd = ["python3", "/app/analyzer.py", "--series-id", str(row["series_id"]), "--season", str(season_number)]
+            cmd = ["python3", "/app/analyzer.py", "--series-id", str(series_id), "--season", str(season_number)]
             subprocess.Popen(cmd)
-
-            update_job(job_id, status="done", progress=100, message="Replace complete")
-            append_log(job_id, "✅ Replace job complete")
+            update_job(job_id, progress=100, status="done", message="Replace complete")
+            append_log(job_id, "✅ Replace job finished successfully")
 
         except Exception as e:
-            append_log(job_id, f"❌ Error: {e}")
             update_job(job_id, status="error", message=str(e))
+            append_log(job_id, f"❌ ERROR: {e}")
 
+    # Run async
     import threading
     threading.Thread(target=job_func, daemon=True).start()
 
