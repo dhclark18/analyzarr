@@ -1,12 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import {
-  Container,
-  Table,
-  Spinner,
-  Alert,
-  Button
-} from 'react-bootstrap';
+import { Container, Table, Spinner, Alert, Button, ProgressBar, Collapse, Card } from 'react-bootstrap';
 import Layout from '../components/Layout';
 import './SeriesDetail.css';
 
@@ -15,11 +9,11 @@ export default function SeriesDetail() {
   const [episodesBySeason, setEpisodesBySeason] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [replacing, setReplacing] = useState({});
-  const [overriding, setOverriding] = useState({});
   const [jobs, setJobs] = useState({});
+  const [libraryScan, setLibraryScan] = useState({ running: false, jobs: [] });
+  const [expandedLogs, setExpandedLogs] = useState({}); // track which jobs' logs are expanded
 
-  // Helper to fetch & group episodes
+  // Fetch episodes
   const loadEpisodes = () => {
     setLoading(true);
     setError(null);
@@ -37,103 +31,141 @@ export default function SeriesDetail() {
       .finally(() => setLoading(false));
   };
 
+  // Poll library scan status
   useEffect(() => {
-    loadEpisodes();
-  }, [seriesTitle]);
+    const interval = setInterval(() => {
+      fetch('/api/library-scan-status')
+        .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
+        .then(data => setLibraryScan(data))
+        .catch(console.error);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Async Replace with job polling
-  const replaceEpisodeAsync = async (key) => {
-    setJobs(prev => ({ ...prev, [key]: { status: 'queued', progress: 0, message: 'Queued...' } }));
-
-    try {
-      const res = await fetch('/api/episodes/replace-async', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key })
+  // Poll all jobs for per-episode progress
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Object.values(jobs).forEach(job => {
+        fetch(`/api/job-status/${job.id}`)
+          .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
+          .then(updated => setJobs(prev => ({ ...prev, [job.id]: updated })))
+          .catch(console.error);
       });
-      if (!res.ok) throw new Error(res.statusText);
-      const { job_id } = await res.json();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [jobs]);
 
-      // Poll job status
-      const poll = setInterval(async () => {
-        const r = await fetch(`/api/job-status/${job_id}`);
-        if (!r.ok) {
-          clearInterval(poll);
-          setJobs(prev => ({ ...prev, [key]: { status: 'error', message: 'Job not found', progress: 0 } }));
-          return;
-        }
-        const job = await r.json();
-        setJobs(prev => ({ ...prev, [key]: job }));
+  useEffect(() => { loadEpisodes(); }, [seriesTitle]);
 
-        if (job.status === 'done' || job.status === 'error') {
-          clearInterval(poll);
-          loadEpisodes(); // refresh table after analyzer finishes
-        }
-      }, 2000);
+  const startJob = (epKey, type) => {
+    const url = type === 'replace' ? '/api/episodes/replace-async' : `/api/episode/${encodeURIComponent(epKey)}/tags`;
+    const body = type === 'replace' ? { key: epKey } : { tag: 'override' };
 
-    } catch (err) {
-      console.error(err);
-      setJobs(prev => ({ ...prev, [key]: { status: 'error', message: err.toString(), progress: 0 } }));
-    }
-  };
-
-  const overrideEpisode = (key) => {
-    setOverriding(prev => ({ ...prev, [key]: true }));
-    fetch(`/api/episode/${encodeURIComponent(key)}/tags`, {
+    fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tag: 'override' })
+      body: JSON.stringify(body)
     })
-      .then(res => {
-        if (!res.ok) throw new Error(res.statusText);
-        return fetch(
-          `/api/episode/${encodeURIComponent(key)}/tags/problematic-episode`,
-          { method: 'DELETE' }
-        );
+      .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
+      .then(data => {
+        if (data.job_id) {
+          setJobs(prev => ({ ...prev, [data.job_id]: { id: data.job_id, episode_key: epKey, status: 'queued', progress: 0, message: '', log: [] } }));
+        }
       })
-      .then(res => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.json();
-      })
-      .then(() => {
-        setOverriding(prev => ({ ...prev, [key]: false }));
-        loadEpisodes();
-      })
-      .catch(err => {
-        console.error(err);
-        setOverriding(prev => ({ ...prev, [key]: false }));
-      });
+      .catch(console.error);
   };
 
-  if (loading) {
-    return (
-      <Layout>
-        <Container className="py-4 text-center">
-          <Spinner animation="border" role="status" />
-        </Container>
-      </Layout>
-    );
-  }
+  const toggleLog = (jobId) => {
+    setExpandedLogs(prev => ({ ...prev, [jobId]: !prev[jobId] }));
+  };
 
-  if (error) {
-    return (
-      <Layout>
-        <Container className="py-4">
-          <Alert variant="danger">Error: {error.toString()}</Alert>
-          <Button as={Link} to="/" variant="outline-light" className="mt-2">
-            ← Back
-          </Button>
-        </Container>
-      </Layout>
-    );
-  }
+  const renderEpisodeActions = (ep) => {
+    const job = Object.values(jobs).find(j => j.episode_key === ep.key);
+    return !ep.matches ? (
+      <>
+        <Button
+          variant="warning"
+          size="sm"
+          disabled={job && job.status === 'running'}
+          onClick={() => startJob(ep.key, 'replace')}
+          className="me-2"
+        >
+          {job ? `${job.status === 'running' ? 'Replacing…' : 'Queued…'}` : 'Replace'}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={job && job.status === 'running'}
+          onClick={() => startJob(ep.key, 'override')}
+        >
+          {job ? `${job.status === 'running' ? 'Overriding…' : 'Queued…'}` : 'Override'}
+        </Button>
+        {job && (
+          <>
+            <ProgressBar
+              now={job.progress || 0}
+              label={`${job.progress || 0}%`}
+              className="mt-1"
+              striped
+              animated={job.status === 'running'}
+              variant={job.status === 'error' ? 'danger' : 'info'}
+            />
+            <Button
+              variant="link"
+              size="sm"
+              className="p-0 mt-1"
+              onClick={() => toggleLog(job.id)}
+            >
+              {expandedLogs[job.id] ? 'Hide Logs' : 'View Logs'}
+            </Button>
+            <Collapse in={expandedLogs[job.id]}>
+              <Card className="mt-1 mb-2" bg="dark" text="light">
+                <Card.Body style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.85rem' }}>
+                  {job.log.map((line, idx) => <div key={idx}>{line}</div>)}
+                </Card.Body>
+              </Card>
+            </Collapse>
+          </>
+        )}
+      </>
+    ) : null;
+  };
+
+  if (loading) return (
+    <Layout><Container className="py-4 text-center"><Spinner animation="border" /></Container></Layout>
+  );
+
+  if (error) return (
+    <Layout>
+      <Container className="py-4">
+        <Alert variant="danger">Error: {error.toString()}</Alert>
+        <Button as={Link} to="/" variant="outline-light" className="mt-2">← Back</Button>
+      </Container>
+    </Layout>
+  );
 
   return (
     <Layout>
       <Container fluid className="py-4">
-        <Button as={Link} to="/" variant="outline-light" className="mb-3">
-          ← Back
-        </Button>
+        <Button as={Link} to="/" variant="outline-light" className="mb-3">← Back</Button>
+
+        {/* Global library scan status */}
+        {libraryScan.running && (
+          <Alert variant="info">
+            <Spinner animation="border" size="sm" className="me-2" />
+            Analyzer / library scan is currently running…
+            {libraryScan.jobs.map(job => (
+              <Collapse in={true} key={job.id}>
+                <Card className="mt-2 mb-2" bg="dark" text="light">
+                  <Card.Body style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.85rem' }}>
+                    {job.log.map((line, idx) => <div key={idx}>{line}</div>)}
+                  </Card.Body>
+                </Card>
+              </Collapse>
+            ))}
+          </Alert>
+        )}
+
         <div className="table-wrapper">
           {Object.keys(episodesBySeason)
             .sort((a, b) => a - b)
@@ -168,42 +200,7 @@ export default function SeriesDetail() {
                         </td>
                         <td>{ep.actualTitle}</td>
                         <td>{ep.confidence}</td>
-                        <td>
-                          {jobs[ep.key] ? (
-                            <div>
-                              {jobs[ep.key].message || 'Running...'} ({jobs[ep.key].progress || 0}%)
-                              {jobs[ep.key].log && jobs[ep.key].log.length > 0 && (
-                                <small className="d-block text-muted" style={{ whiteSpace: 'pre-wrap' }}>
-                                  {jobs[ep.key].log.slice(-5).join('\n')}
-                                </small>
-                              )}
-                            </div>
-                          ) : (
-                            <>
-                              {!ep.matches && (
-                                <>
-                                  <Button
-                                    variant="warning"
-                                    size="sm"
-                                    disabled={replacing[ep.key]}
-                                    onClick={() => replaceEpisodeAsync(ep.key)}
-                                    className="me-2"
-                                  >
-                                    {replacing[ep.key] ? 'Replacing…' : 'Replace'}
-                                  </Button>
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    disabled={overriding[ep.key]}
-                                    onClick={() => overrideEpisode(ep.key)}
-                                  >
-                                    {overriding[ep.key] ? 'Overriding…' : 'Override'}
-                                  </Button>
-                                </>
-                              )}
-                            </>
-                          )}
-                        </td>
+                        <td>{renderEpisodeActions(ep)}</td>
                       </tr>
                     ))}
                   </tbody>
