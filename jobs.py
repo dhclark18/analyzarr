@@ -1,209 +1,242 @@
 # jobs.py
+"""
+Simple in-process job system for Analyzarr.
+
+Exports:
+ - start_replace_job(ep_key) -> job_id
+ - start_library_scan_job(run_fn, description=None) -> job_id
+ - get_job(job_id) -> job dict or None
+ - append_log(job_id, text)
+ - update_job(job_id, **kwargs)
+ - wait_for_sonarr_import(sonarr_client, series_id, season_number, episode_number,
+                         episode_id=None, job_id=None, timeout=300, poll_interval=5)
+ - jobs (dict)
+ - jobs_lock (threading.Lock)
+"""
+
 import uuid
 import time
 import threading
-import subprocess
-import requests
+import logging
 import os
-import time
-from analyzer import SonarrClient
+import requests
+from typing import Callable, Optional
 
+# In-memory job store
 jobs = {}
 jobs_lock = threading.Lock()
 
-SONARR_URL = os.environ.get("SONARR_URL")
-SONARR_API = os.environ.get("SONARR_API_KEY")
-INTERNAL_API_BASE = os.environ.get("INTERNAL_API_BASE", "http://127.0.0.1:80")
+# Internal API base (used by some workflows if needed)
+INTERNAL_API_BASE = os.environ.get("INTERNAL_API_BASE", "http://127.0.0.1:5001")
 
+# Default timeouts / configuration (can be overridden via env)
+SONARR_IMPORT_TIMEOUT = int(os.environ.get("SONARR_IMPORT_TIMEOUT", "300"))
+ANALYZER_TIMEOUT = int(os.environ.get("ANALYZER_TIMEOUT", "600"))
 
+# --- Logging helper for this module ---
+logger = logging.getLogger("jobs")
+
+# --- Low-level helpers (thread-safe using jobs_lock) ------------------------
 def _with_lock(fn):
     def wrapped(*args, **kwargs):
         with jobs_lock:
             return fn(*args, **kwargs)
     return wrapped
 
-
 @_with_lock
-def create_job_record(job_id, init):
+def create_job_record(job_id: str, init: dict):
+    """Create or overwrite job record with `init` dict."""
     jobs[job_id] = init
 
-
-@_with_lock
-def update_job(job_id, **kwargs):
-    if job_id in jobs:
-        jobs[job_id].update(kwargs)
-
-
-@_with_lock
-def append_log(job_id, txt):
-    if job_id in jobs:
-        entry = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {txt}"
-        jobs[job_id]["log"].append(entry)
-        if len(jobs[job_id]["log"]) > 200:
-            jobs[job_id]["log"] = jobs[job_id]["log"][-200:]
-
-
-def get_job(job_id):
+def get_job(job_id: str):
+    """Return job dict (caller should not mutate it directly)."""
     with jobs_lock:
-        return jobs.get(job_id)
+        # return a shallow copy to avoid accidental mutation
+        job = jobs.get(job_id)
+        return dict(job) if job is not None else None
 
+def _append_log(job_id: str, txt: str):
+    """Internal append log; assumes jobs_lock already held by caller or safe to call."""
+    entry = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {txt}"
+    if job_id not in jobs:
+        # fallback: create a basic system job entry (shouldn't usually happen)
+        jobs[job_id] = {"status": "unknown", "progress": 0, "message": "", "log": [], "type": "system"}
+    jobs[job_id].setdefault("log", []).append(entry)
+    # cap logs
+    if len(jobs[job_id]["log"]) > 1000:
+        jobs[job_id]["log"] = jobs[job_id]["log"][-1000:]
 
-# ─── Replace Job ───────────────────────────────
-def start_replace_job(ep_key):
-    job_id = str(uuid.uuid4())
+@_with_lock
+def append_log(job_id: str, txt: str):
+    """Thread-safe append to a job's log."""
+    _append_log(job_id, txt)
+
+@_with_lock
+def update_job(job_id: str, **kwargs):
+    """
+    Set keys on the job record in a thread-safe way.
+    Typical kwargs: status, progress (0-100), message, type, episode_key, etc.
+    """
+    job = jobs.get(job_id)
+    if not job:
+        # create a placeholder if missing
+        jobs[job_id] = {
+            "status": kwargs.get("status", "unknown"),
+            "progress": kwargs.get("progress", 0),
+            "message": kwargs.get("message", ""),
+            "log": [],
+            "type": kwargs.get("type", "generic")
+        }
+        job = jobs[job_id]
+
+    # update fields
+    for k, v in kwargs.items():
+        job[k] = v
+
+# --- Job creators ----------------------------------------------------------
+def _new_job_id() -> str:
+    return str(uuid.uuid4())
+
+def start_replace_job(episode_key: str) -> str:
+    """
+    Create a replace job record and return job_id. This function does NOT run
+    the replace logic itself — the caller (e.g. api.py) typically spawns the
+    thread that executes the job (so the job_func can capture local vars).
+    """
+    job_id = _new_job_id()
     create_job_record(job_id, {
         "status": "queued",
         "progress": 0,
         "message": "Queued",
         "log": [],
-        "episode_key": ep_key,
+        "episode_key": episode_key,
         "type": "replace"
     })
-    threading.Thread(target=_replace_worker, args=(job_id, ep_key), daemon=True).start()
     return job_id
 
-
-def _replace_worker(job_id, ep_key):
-    try:
-        update_job(job_id, status="running", progress=5, message="Triggering replacement...")
-        append_log(job_id, f"Starting replace job for episode {ep_key}")
-
-        # Trigger internal replace endpoint
-        url = INTERNAL_API_BASE.rstrip("/") + "/api/episodes/replace"
-        append_log(job_id, f"POST {url}")
-        r = requests.post(url, json={"key": ep_key}, timeout=30)
-        if r.status_code >= 400:
-            append_log(job_id, f"Replace endpoint error: {r.status_code} {r.text}")
-            update_job(job_id, status="error", message="Replace endpoint failed")
-            return
-        update_job(job_id, progress=20, message="Replace triggered")
-
-        # Fetch episode metadata
-        url = INTERNAL_API_BASE.rstrip("/") + "/api/episodes/get_by_key"
-        r = requests.get(url, params={"key": ep_key}, timeout=10)
-        r.raise_for_status()
-        meta = r.json()
-        series_id = meta.get("series_id")
-        episode_id = meta.get("episode_id")
-        code = meta.get("code")
-
-        if not series_id or not episode_id:
-            append_log(job_id, "Missing series_id or episode_id")
-            update_job(job_id, status="error", message="Missing episode metadata")
-            return
-
-        # Poll Sonarr for import event
-        if SONARR_URL and SONARR_API:
-            append_log(job_id, "Polling Sonarr history for import...")
-            found = False
-            timeout = int(os.environ.get("SONARR_IMPORT_TIMEOUT", "300"))
-            poll_interval = 4
-            elapsed = 0
-            while elapsed < timeout:
-                try:
-                    hist_url = SONARR_URL.rstrip("/") + "/api/v3/history"
-                    res = requests.get(hist_url, params={"apikey": SONARR_API, "pageSize": 50}, timeout=10)
-                    res.raise_for_status()
-                    entries = res.json()
-                    for e in entries:
-                        data = e.get("data") or {}
-                        eps = data.get("episodes") or ([data.get("episode")] if data.get("episode") else [])
-                        for ep in eps:
-                            if ep and (ep.get("id") == episode_id or ep.get("episodeId") == episode_id):
-                                append_log(job_id, f"Found Sonarr import event id={e.get('id')}")
-                                found = True
-                                break
-                        if found: break
-                except Exception as e:
-                    append_log(job_id, f"Sonarr poll error: {e}")
-                if found: break
-                time.sleep(poll_interval)
-                elapsed += poll_interval
-                update_job(job_id, progress=20 + int(elapsed / max(1, timeout) * 50),
-                           message=f"Waiting for Sonarr import {elapsed}s")
-
-            if not found:
-                append_log(job_id, f"Sonarr import timeout after {elapsed}s")
-                update_job(job_id, message="Timeout, running analyzer anyway", progress=80)
-
-        # Run analyzer
-        update_job(job_id, progress=85, message="Running analyzer...")
-        import re
-        cmd = ["python3", "/app/analyzer.py", "--series-id", str(series_id)]
-        if code:
-            m = re.match(r"S(\d{2})E\d{2}", code or "")
-            if m:
-                cmd += ["--season", str(int(m.group(1)))]
-        append_log(job_id, f"Analyzer cmd: {' '.join(cmd)}")
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=int(os.environ.get("ANALYZER_TIMEOUT", "600")))
-        append_log(job_id, f"Analyzer stdout: {p.stdout[:2000]}")
-        if p.returncode != 0:
-            append_log(job_id, f"Analyzer returned {p.returncode} stderr: {p.stderr[:2000]}")
-            update_job(job_id, status="error", progress=95, message="Analyzer failed")
-            return
-
-        append_log(job_id, "Analyzer finished successfully")
-        update_job(job_id, progress=100, status="done", message="Complete")
-
-    except Exception as e:
-        append_log(job_id, f"Unhandled job error: {e}")
-        update_job(job_id, status="error", message="Unhandled error")
-
-
-# ─── Library Scan Job ───────────────────────────────
-def start_library_scan_job(scan_function, description="Library scan"):
+def start_library_scan_job(run_fn: Callable[[str, Callable, Callable], None], description: Optional[str] = None) -> str:
     """
-    scan_function: callable to run for scanning the library
+    Start a library_scan job that runs `run_fn(job_id, append_log, update_job)`.
+    This function DOES spawn a thread and runs run_fn in background.
     Returns job_id immediately.
     """
-    job_id = str(uuid.uuid4())
+    job_id = _new_job_id()
     create_job_record(job_id, {
         "status": "queued",
         "progress": 0,
-        "message": description,
+        "message": description or "Queued library scan",
         "log": [],
-        "episode_key": None,
         "type": "library_scan"
     })
-    threading.Thread(target=_library_scan_worker, args=(job_id, scan_function), daemon=True).start()
+
+    def _worker():
+        try:
+            append_log(job_id, "Starting library scan job")
+            update_job(job_id, status="running", progress=5)
+            # run_fn should take (job_id, append_log, update_job)
+            try:
+                run_fn(job_id, append_log, update_job)
+                update_job(job_id, status="done", progress=100, message="Library scan complete")
+                append_log(job_id, "Library scan finished")
+            except Exception as e:
+                append_log(job_id, f"Library scan error: {e}")
+                update_job(job_id, status="error", message=str(e))
+        except Exception:
+            logger.exception("Unhandled exception in library scan worker")
+            update_job(job_id, status="error", message="Unhandled exception in worker")
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
     return job_id
 
-
-def _library_scan_worker(job_id, scan_function):
-    try:
-        update_job(job_id, status="running", progress=5)
-        append_log(job_id, "Library scan started")
-        scan_function(job_id, append_log, update_job)
-        append_log(job_id, "Library scan finished")
-        update_job(job_id, progress=100, status="done", message="Complete")
-    except Exception as e:
-        append_log(job_id, f"Library scan error: {e}")
-        update_job(job_id, status="error", message="Scan failed")
-
-def wait_for_sonarr_import(sonarr_client, series_id, season_number, episode_number, job_id=None, timeout=300, poll_interval=5):
+# --- Sonarr import waiter --------------------------------------------------
+def wait_for_sonarr_import(
+    sonarr_client,
+    series_id: int,
+    season_number: int,
+    episode_number: int,
+    episode_id: Optional[int] = None,
+    job_id: Optional[str] = None,
+    timeout: int = SONARR_IMPORT_TIMEOUT,
+    poll_interval: int = 5
+) -> bool:
     """
-    Wait until Sonarr has imported the episode, checking by series/season/episode.
+    Poll Sonarr until the requested episode shows hasFile=True.
+    - Tries /episode/{episode_id} if episode_id provided (fast/direct)
+    - Falls back to /episode?seriesId={series_id} and matches season/episode
+    - Updates job progress/log if job_id is given.
+    - Returns True if import detected; raises TimeoutError on timeout.
     """
-    import time
-
     start = time.time()
+    if job_id:
+        append_log(job_id, f"Waiting for Sonarr import of S{season_number:02}E{episode_number:02}...")
+        update_job(job_id, status="running", progress=50, message="Waiting for Sonarr import")
+
     while True:
         try:
-            # get all episodes in the season
-            episodes = sonarr_client.get_episodes(series_id)
-            for ep in episodes:
-                if ep["seasonNumber"] == season_number and ep["episodeNumber"] == episode_number and ep.get("hasFile"):
+            # 1) Try episode/{id} endpoint first
+            if episode_id:
+                try:
+                    ep = sonarr_client.get(f"episode/{episode_id}")
+                except Exception as e:
+                    ep = None
+                    append_log(job_id or "system", f"Sonarr episode/{episode_id} check failed: {e}")
+                if isinstance(ep, dict) and ep.get("hasFile"):
                     if job_id:
-                        append_log(job_id, f"Episode S{season_number:02}E{episode_number:02} imported into Sonarr")
-                        update_job(job_id, progress=90)
+                        append_log(job_id, f"Detected imported file via episode/{episode_id}")
+                        update_job(job_id, progress=90, message="Episode imported")
                     return True
-        except Exception as e:
-            if job_id:
-                append_log(job_id, f"Error checking Sonarr: {e}")
 
-        if time.time() - start > timeout:
+            # 2) Fallback: query episodes by series and look for the matching S/E
+            episodes = sonarr_client.get(f"episode?seriesId={series_id}") or []
+            found_match_entry = False
+            for e in episodes:
+                snum = e.get("seasonNumber")
+                en   = e.get("episodeNumber")
+                if snum == season_number and en == episode_number:
+                    found_match_entry = True
+                    if e.get("hasFile"):
+                        if job_id:
+                            append_log(job_id, f"Detected imported file for S{season_number:02}E{episode_number:02} in series listing")
+                            update_job(job_id, progress=90, message="Episode imported")
+                        return True
+                    else:
+                        # entry exists but no file yet — keep waiting
+                        if job_id:
+                            append_log(job_id, f"Found S{season_number:02}E{episode_number:02} but no file yet (will keep polling)")
+                    break
+
+            if not found_match_entry:
+                # no episode entry found; log and keep polling
+                if job_id:
+                    append_log(job_id, f"No episode entry for S{season_number:02}E{episode_number:02} found in Sonarr yet")
+
+        except Exception as exc:
+            # Sonarr or network error; log and retry until timeout
+            logger.exception("Error while polling Sonarr for import")
             if job_id:
-                append_log(job_id, f"Timeout waiting for S{season_number:02}E{episode_number:02} import")
-            raise TimeoutError(f"Episode S{season_number:02}E{episode_number:02} not imported after {timeout} seconds")
+                append_log(job_id, f"Sonarr poll error: {exc}")
+
+        # Timeout check
+        elapsed = time.time() - start
+        if elapsed > timeout:
+            msg = f"Timeout waiting for S{season_number:02}E{episode_number:02} after {timeout}s"
+            if job_id:
+                append_log(job_id, msg)
+                update_job(job_id, status="error", message="Timed out waiting for Sonarr import")
+            raise TimeoutError(msg)
 
         time.sleep(poll_interval)
+
+# --- Utilities useful for debugging / tests --------------------------------
+def list_running_jobs():
+    with jobs_lock:
+        return [dict(j) for j in jobs.values() if j.get("status") == "running"]
+
+# If module is run directly, print a tiny status summary
+if __name__ == "__main__":
+    print("Jobs module loaded. Current jobs:")
+    with jobs_lock:
+        for k, v in jobs.items():
+            print(k, v.get("status"), v.get("message"))
+
