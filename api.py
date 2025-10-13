@@ -350,7 +350,8 @@ def api_episodes_get_by_key():
 @app.route("/api/library-scan-status")
 def library_scan_status():
     with jobs_lock:
-        running_jobs = [job for job in jobs.values() if job.get("status") == "running" and job.get("type") == "library_scan"]
+        running_jobs = [job for job in jobs.values()
+                        if job.get("status") == "running" and job.get("type") == "library_scan"]
         return jsonify({
             "running": len(running_jobs) > 0,
             "jobs": running_jobs
