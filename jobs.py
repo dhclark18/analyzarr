@@ -5,6 +5,8 @@ import threading
 import subprocess
 import requests
 import os
+import time
+from analyzer import SonarrClient
 
 jobs = {}
 jobs_lock = threading.Lock()
@@ -177,3 +179,28 @@ def _library_scan_worker(job_id, scan_function):
     except Exception as e:
         append_log(job_id, f"Library scan error: {e}")
         update_job(job_id, status="error", message="Scan failed")
+
+def wait_for_sonarr_import(sonarr: SonarrClient, series_id: int, episode_id: int, job_id=None, timeout=300, poll_interval=5):
+    """
+    Poll Sonarr until the episode has been imported (hasFile=True) or timeout.
+    Updates the job progress if job_id is provided.
+    """
+    start = time.time()
+    if job_id:
+        append_log(job_id, "Waiting for Sonarr to import the episode…")
+        update_job(job_id, status="running", progress=50, message="Waiting for Sonarr import")
+
+    while time.time() - start < timeout:
+        ep = sonarr.get_episode(series_id, episode_id)
+        if ep and ep.get("hasFile"):
+            if job_id:
+                append_log(job_id, "Episode successfully imported by Sonarr")
+                update_job(job_id, status="done", progress=100, message="Episode imported")
+            return True
+        time.sleep(poll_interval)
+
+    # Timeout
+    if job_id:
+        append_log(job_id, "Timeout waiting for Sonarr import")
+        update_job(job_id, status="error", progress=0, message="Timed out waiting for Sonarr import")
+    return False
