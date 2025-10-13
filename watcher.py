@@ -1,5 +1,5 @@
 import os, time, subprocess, logging
-from jobs import create_job, update_job
+from jobs import start_library_scan_job
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers.polling import PollingObserver as Observer
 
@@ -23,7 +23,7 @@ class ChangeHandler(FileSystemEventHandler):
         now = time.time()
         if ignore_cooldown or (now - last_run) > COOLDOWN_SECONDS:
             last_run = now
-            job_id = create_job("library_scan", message="Starting library scan")
+            job_id = start_library_scan_job()
             logging.info(f"🔁 Change detected — running analyzer (job {job_id})...")
             update_job(job_id, status="running")
             try:
