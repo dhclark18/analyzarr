@@ -128,7 +128,7 @@ const replaceEpisode = async (key) => {
           {Object.keys(episodesBySeason).sort((a,b)=>a-b).map(seasonNum => (
             <section key={seasonNum} className="season-block mb-5">
               <h2 className="page-subtitle mb-3">Season {seasonNum}</h2>
-              <Table striped hover responsive variant="dark">
+              <Table striped hover responsive className="table">
                 <thead>
                   <tr>
                     <th>Match?</th>
