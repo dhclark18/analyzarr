@@ -28,7 +28,11 @@
 
   /* Utility / Feedback */
   --color-error:          #E53E3E;   /* Alerts / errors */
+  --color-error-dark:     #C53030;
+  --color-error-light:    #FEB2B2;
   --color-success:        #38A169;   /* Success states */
+  --color-success-dark:   #2F855A;
+  --color-success-light:  #9AE6B4;
 }
 
 /* global background/text */
@@ -68,18 +72,76 @@ body {
 .btn-primary-custom {
   background-color: var(--color-primary);
   border-color: var(--color-primary-dark);
-  color: var(--color-text);
+  color: #fff;
+  transition: all 0.2s ease;
 }
 .btn-primary-custom:hover {
-  background-color: var(--color-primary-light);
-  border-color: var(--color-primary);
+  background-color: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
 }
+
 .btn-accent {
   background-color: var(--color-accent);
   border-color: var(--color-accent-dark);
-  color: var(--color-text);
+  color: #fff;
+  transition: all 0.2s ease;
 }
 .btn-accent:hover {
-  background-color: var(--color-accent-light);
-  border-color: var(--color-accent);
+  background-color: var(--color-accent-dark);
+  border-color: var(--color-accent-dark);
+}
+
+/* success / error / info buttons */
+.btn-success-custom {
+  background-color: var(--color-success);
+  border-color: var(--color-success-dark);
+  color: #fff;
+}
+.btn-success-custom:hover {
+  background-color: var(--color-success-dark);
+  border-color: var(--color-success-dark);
+}
+
+.btn-error-custom {
+  background-color: var(--color-error);
+  border-color: var(--color-error-dark);
+  color: #fff;
+}
+.btn-error-custom:hover {
+  background-color: var(--color-error-dark);
+  border-color: var(--color-error-dark);
+}
+
+/* Bootstrap override for badges & alerts */
+.badge.bg-success,
+.alert-success {
+  background-color: var(--color-success) !important;
+  color: #fff !important;
+}
+
+.badge.bg-danger,
+.alert-danger {
+  background-color: var(--color-error) !important;
+  color: #fff !important;
+}
+
+.badge.bg-warning,
+.alert-warning {
+  background-color: #DD6B20 !important;
+  color: #fff !important;
+}
+
+.badge.bg-info,
+.alert-info {
+  background-color: #3182CE !important;
+  color: #fff !important;
+}
+
+/* Optional rounded and shadowed buttons */
+button.btn-primary-custom,
+button.btn-accent,
+button.btn-success-custom,
+button.btn-error-custom {
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
