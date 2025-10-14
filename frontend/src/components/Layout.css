@@ -24,7 +24,9 @@
 /* Primary navbar */
 .navbar {
   background-color: var(--color-navbar-bg) !important;
+  color: var(--color-navbar-text) !important;
 }
+.navbar-brand { color: var(--color-navbar-brand) !important; }
 
 /* Secondary navbar sits at top of main column */
 .navbar-secondary {
