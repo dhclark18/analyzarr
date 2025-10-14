@@ -181,16 +181,19 @@ const replaceEpisode = async (key) => {
                               >
                                 {inProgress && job.status==='overriding' ? 'Overriding…' : 'Override'}
                               </Button>
-                              {job.progress !== undefined && (
-                                <ProgressBar
-                                  now={job.progress}
-                                  label={`${job.progress || 0}%`}
-                                  striped
-                                  animated={inProgress}
-                                  className="mt-1"
-                                />
+                              {/* Show progress + log only while running */}
+                              {inProgress && job.progress !== undefined && (
+                                <>
+                                  <ProgressBar
+                                    now={job.progress}
+                                    label={`${job.progress || 0}%`}
+                                    striped
+                                    animated
+                                    className="mt-1"
+                                  />
+                                  {job.message && <div className="text-muted small">{job.message}</div>}
+                                </>
                               )}
-                              {job.message && <div className="text-muted small">{job.message}</div>}
                             </>
                           )}
                         </td>
