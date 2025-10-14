@@ -1,14 +1,65 @@
+/* Table container */
 .table-wrapper {
-  /* full viewport height minus navbar (56px) and top padding (2rem = 32px) */
   max-height: calc(100vh - 56px - 2rem);
   overflow-y: auto;
-  padding-right: 1rem;    /* avoid cutting off scrollbar */
+  padding-right: 1rem;
+  background-color: var(--color-surface);
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
 }
+
+/* Table background and text */
+.table {
+  background-color: var(--color-surface) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* Table header */
+.table thead th {
+  background-color: var(--color-primary-light) !important;
+  color: #fff !important;
+  border-bottom: 2px solid var(--color-primary-dark) !important;
+}
+
+/* Table rows */
+.table tbody tr {
+  background-color: var(--color-surface) !important;
+  color: var(--color-text) !important;
+  transition: background-color 0.2s ease;
+}
+
+/* Alternate row shading */
+.table tbody tr:nth-child(even) {
+  background-color: #F7FAFC !important; /* light gray alternate */
+}
+
+/* Row hover effect */
+.table tbody tr:hover {
+  background-color: var(--color-accent-light) !important;
+  color: var(--color-text) !important;
+}
+
+/* Borders */
+.table td, .table th {
+  border-color: var(--color-border) !important;
+}
+
+/* Links inside table cells */
 .expected-link {
-  color: inherit;        /* keep the dark-mode text color */
-  text-decoration: none; /* no underline by default */
+  color: var(--color-primary) !important;
+  text-decoration: none;
 }
 .expected-link:hover {
   text-decoration: underline;
+  color: var(--color-primary-dark) !important;
   cursor: pointer;
+}
+
+/* Optional: make badges pop visually in light theme */
+.table .badge.bg-success {
+  background-color: var(--color-success) !important;
+}
+.table .badge.bg-danger {
+  background-color: var(--color-error) !important;
 }
