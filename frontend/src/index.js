@@ -5,6 +5,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 import App from './App';
+import './components/Layout.css';
 import SeriesDetail from './pages/SeriesDetail';
 import EpisodeDetail from './pages/EpisodeDetails';
 import Overview from './pages/Overview';
