@@ -151,13 +151,3 @@ button.btn-error-custom {
 .table tbody td:first-child {
   padding-left: 1rem !important;
 }
-
-/* Force navbar to use theme color */
-.navbar,
-.navbar.navbar-light,
-.navbar.bg-body,
-.navbar.bg-light {
-  background-color: var(--color-navbar-bg) !important;
-  color: var(--color-navbar-text) !important;
-  border-bottom: 1px solid var(--color-border);
-}
