@@ -21,20 +21,20 @@ export default function Layout({ children }) {
   return (
     <>
       {/* Primary top‐level stats bar */}
-      <Navbar bg="dark" variant="dark" className="mb-0">
+      <Navbar expand="lg" className="navbar mb-0 shadow-sm">
         <Container fluid>
           <Navbar.Brand>Analyzarr</Navbar.Brand>
           <Nav className="ms-auto">
-            <Nav.Item className="text-light me-3">
+            <Nav.Item className="me-3">
               Episodes: {stats.totalEpisodes}
             </Nav.Item>
-            <Nav.Item className="text-light me-3">
+            <Nav.Item className="me-3">
               Shows: {stats.totalShows}
             </Nav.Item>
-            <Nav.Item className="text-light me-3">
+            <Nav.Item className="me-3">
               Mismatches: {stats.totalMismatches}
             </Nav.Item>
-            <Nav.Item className="text-light">
+            <Nav.Item>
               Missing Titles: {stats.totalMissingTitles}
             </Nav.Item>
           </Nav>
