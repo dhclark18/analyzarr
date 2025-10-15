@@ -33,55 +33,65 @@ export default function SeriesDetail() {
   }, [seriesTitle]);
 
   // --- Start a replace job ---
-  const replaceEpisode = async (key) => {
-    setJobs((prev) => ({
-      ...prev,
-      [key]: { status: 'queued', progress: 0, message: 'Queued…' },
-    }));
+const replaceEpisode = async (key) => {
+  // initialize job state
+  setJobs(prev => ({
+    ...prev,
+    [key]: { status: 'queued', progress: 0, message: 'Queued…' }
+  }));
 
-    try {
-      const res = await fetch('/api/episodes/replace-async', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key }),
-      });
-      const data = await res.json();
-      if (!data.job_id) throw new Error('No job_id returned');
-      const jobId = data.job_id;
+  try {
+    // enqueue job
+    const res = await fetch('/api/episodes/replace-async', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    const data = await res.json();
+    if (!data.job_id) throw new Error('No job_id returned');
+    const jobId = data.job_id;
 
-      const interval = setInterval(async () => {
-        try {
-          const r = await fetch(`/api/job-status/${jobId}`);
-          if (!r.ok) throw new Error(`Status fetch failed: ${r.status}`);
-          const status = await r.json();
-          const mapped = {
-            status: status.status,
-            progress: status.progress || 0,
-            message: status.message || '',
-          };
-          setJobs((prev) => ({ ...prev, [key]: mapped }));
+    // poll job status every 2s
+    const interval = setInterval(async () => {
+      try {
+        const r = await fetch(`/api/job-status/${jobId}`);
+        if (!r.ok) throw new Error(`Status fetch failed: ${r.status}`);
+        const status = await r.json();
 
-          if (mapped.status === 'done' || mapped.status === 'error') {
-            clearInterval(interval);
-            loadEpisodes();
-          }
-        } catch (err) {
-          console.error('Error fetching job status:', err);
+        // map Flask job fields to frontend
+        const mapped = {
+          status: status.status,           // running, queued, done, error
+          progress: status.progress || 0,  // 0–100
+          message: status.message || '',   // current message
+        };
+        setJobs(prev => ({ ...prev, [key]: mapped }));
+
+        // ✅ Stop polling when done/error and restore scroll position
+        if (mapped.status === 'done' || mapped.status === 'error') {
+          const scrollY = window.scrollY;             // save scroll position
           clearInterval(interval);
-          setJobs((prev) => ({
-            ...prev,
-            [key]: { status: 'error', message: err.toString(), progress: 0 },
-          }));
+          await loadEpisodes();                       // refresh episode data
+          window.scrollTo({ top: scrollY, behavior: 'instant' }); // restore
         }
-      }, 2000);
-    } catch (err) {
-      console.error('Replace job error:', err);
-      setJobs((prev) => ({
-        ...prev,
-        [key]: { status: 'error', message: err.toString(), progress: 0 },
-      }));
-    }
-  };
+
+      } catch (err) {
+        console.error('Error fetching job status:', err);
+        clearInterval(interval);
+        setJobs(prev => ({
+          ...prev,
+          [key]: { status: 'error', message: err.toString(), progress: 0 }
+        }));
+      }
+    }, 2000);
+
+  } catch (err) {
+    console.error('Replace job error:', err);
+    setJobs(prev => ({
+      ...prev,
+      [key]: { status: 'error', message: err.toString(), progress: 0 }
+    }));
+  }
+};
 
   const overrideEpisode = async (key) => {
     setJobs((prev) => ({ ...prev, [key]: { ...prev[key], status: 'overriding' } }));
