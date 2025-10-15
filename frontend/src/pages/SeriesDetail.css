@@ -64,19 +64,12 @@
   background-color: var(--color-error) !important;
 }
 
-/* --- Force consistent left spacing on table headers and cells --- */
-.table thead th:first-of-type,
-.table tbody td:first-of-type {
-  padding-left: 16px !important;      /* Adjust value as needed */
+/* Shift the "Season X" header slightly to the right */
+.page-subtitle {
+  margin-left: 0.5rem; /* ~8px */
 }
 
-.table thead th {
-  padding-top: 0.75rem;
-  padding-bottom: 0.75rem;
-}
-
-/* If the header still touches the border, add a left border gap */
-.table {
-  border-collapse: separate !important;
-  border-spacing: 4px 0;              /* adds a small gap left/right */
+/* optional: match exact table cell padding (1rem = 16px) */
+.page-subtitle {
+  margin-left: 1rem; /* adjust between 0.5rem–1rem for best alignment */
 }
