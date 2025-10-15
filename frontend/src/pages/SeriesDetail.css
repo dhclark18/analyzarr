@@ -74,15 +74,7 @@
   margin-left: 1rem; /* adjust between 0.5rem–1rem for best alignment */
 }
 
-/* tighten gap between secondary nav and first table */
-.navbar-secondary {
-  margin-bottom: 0 !important;
-}
-
-.table-wrapper .season-block:first-of-type {
-  margin-top: 0.25rem !important;
-}
-
-.page-subtitle {
-  margin-bottom: 0.5rem !important;
+/* Reduce space between secondary nav and first table */
+.container.py-4 {
+  padding-top: 0.5rem !important;   /* 0 removes it entirely */
 }
