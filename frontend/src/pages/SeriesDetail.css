@@ -78,3 +78,19 @@
 .container.py-4 {
   padding-top: 0rem !important;   /* 0 removes it entirely */
 }
+
+/* Each season block appears as its own card section */
+.season-block {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 2rem; /* space between seasons */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Optional: header alignment tweak */
+.season-block .page-subtitle {
+  margin-left: 0.25rem;
+  margin-bottom: 0.75rem;
+}
