@@ -145,9 +145,3 @@ button.btn-error-custom {
   border-radius: 6px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
-
-/* Add breathing room to table headers and first column */
-.table thead th:first-child,
-.table tbody td:first-child {
-  padding-left: 1rem !important;
-}
