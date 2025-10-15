@@ -68,11 +68,9 @@ const replaceEpisode = async (key) => {
 
         // ✅ Stop polling when done/error and restore scroll position
         if (mapped.status === 'done' || mapped.status === 'error') {
-          const scrollY = window.scrollY;             // save scroll position
-          clearInterval(interval);
-          await loadEpisodes();                       // refresh episode data
-          window.scrollTo({ top: scrollY, behavior: 'instant' }); // restore
-        }
+            clearInterval(interval);
+            loadEpisodes();
+          }
 
       } catch (err) {
         console.error('Error fetching job status:', err);
