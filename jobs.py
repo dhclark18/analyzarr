@@ -93,6 +93,32 @@ def update_job(job_id: str, **kwargs):
     for k, v in kwargs.items():
         job[k] = v
 
+def poll_sonarr_command(command_id, max_wait=120):
+    """Poll Sonarr for completion or rejection."""
+    start = time.time()
+    while time.time() - start < max_wait:
+        r = requests.get(
+            f"{SONARR_URL}/api/v3/command/{command_id}",
+            headers={"X-Api-Key": SONARR_API_KEY},
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        state = data.get("state")
+        status = data.get("status")
+        error = data.get("errorMessage")
+
+        if state == "completed" and not error and status == "completed":
+            return {"status": "done", "message": "Sonarr import completed"}
+
+        if error or status == "failed":
+            return {"status": "error", "message": error or "Sonarr command failed"}
+
+        time.sleep(2)
+
+    return {"status": "error", "message": "Sonarr import timed out"}
+ 
 # --- Job creators ----------------------------------------------------------
 def _new_job_id() -> str:
     return str(uuid.uuid4())
