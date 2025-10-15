@@ -66,7 +66,7 @@ const replaceEpisode = async (key) => {
         };
         setJobs(prev => ({ ...prev, [key]: mapped }));
 
-        // ✅ Stop polling when done/error and restore scroll position
+        // ✅ Stop polling when done/error
         if (mapped.status === 'done' || mapped.status === 'error') {
             clearInterval(interval);
             loadEpisodes();
