@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Container, Table, Spinner, Alert, Button, ProgressBar } from 'react-bootstrap';
 import Layout from '../components/Layout';
@@ -10,7 +10,8 @@ export default function SeriesDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [jobs, setJobs] = useState({}); // per-episode job status
-
+  const wrapperRef = useRef(null);
+  
   const loadEpisodes = () => {
     setLoading(true);
     setError(null);
@@ -68,9 +69,24 @@ const replaceEpisode = async (key) => {
 
         // ✅ Stop polling when done/error
         if (mapped.status === 'done' || mapped.status === 'error') {
-            clearInterval(interval);
-            loadEpisodes();
-          }
+          // capture the scrolling container's position (fallback to window)
+          const container = wrapperRef.current;
+          const prevScroll = container ? container.scrollTop : window.scrollY;
+        
+          clearInterval(interval);
+          loadEpisodes(); // triggers re-render
+        
+          // restore after the DOM re-renders
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (container && container.scrollTop !== undefined) {
+                container.scrollTop = prevScroll;
+              } else {
+                window.scrollTo({ top: prevScroll });
+              }
+            });
+          });
+        }
 
       } catch (err) {
         console.error('Error fetching job status:', err);
@@ -131,7 +147,7 @@ const replaceEpisode = async (key) => {
   return (
     <Layout>
       <Container fluid className="py-4">
-        <div className="table-wrapper">
+        <div className="table-wrapper" ref={wrapperRef}>
           {Object.keys(episodesBySeason)
             .sort((a, b) => a - b)
             .map((seasonNum) => (
