@@ -63,3 +63,14 @@
 .table .badge.bg-danger {
   background-color: var(--color-error) !important;
 }
+
+/* Add left padding to first column (header + body) */
+.table thead th:first-child,
+.table tbody td:first-child {
+  padding-left: 1rem !important;  /* adjust to 1.25rem for more space */
+}
+
+/* Optional: visually align header with card margins */
+.table {
+  margin-left: 0.25rem;  /* small global nudge */
+}
