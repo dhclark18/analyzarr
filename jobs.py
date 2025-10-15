@@ -32,6 +32,8 @@ INTERNAL_API_BASE = os.environ.get("INTERNAL_API_BASE", "http://127.0.0.1:5001")
 # Default timeouts / configuration (can be overridden via env)
 SONARR_IMPORT_TIMEOUT = int(os.environ.get("SONARR_IMPORT_TIMEOUT", "300"))
 ANALYZER_TIMEOUT = int(os.environ.get("ANALYZER_TIMEOUT", "600"))
+SONARR_URL = os.getenv("SONARR_URL")
+SONARR_API_KEY = os.getenv("SONARR_API_KEY")
 
 # --- Logging helper for this module ---
 logger = logging.getLogger("jobs")
@@ -93,31 +95,53 @@ def update_job(job_id: str, **kwargs):
     for k, v in kwargs.items():
         job[k] = v
 
-def poll_sonarr_command(command_id, max_wait=120):
-    """Poll Sonarr for completion or rejection."""
+def poll_sonarr_command(command_id, job_id=None, max_wait=120):
+    """Poll Sonarr for completion, rejection, or timeout."""
     start = time.time()
     while time.time() - start < max_wait:
-        r = requests.get(
-            f"{SONARR_URL}/api/v3/command/{command_id}",
-            headers={"X-Api-Key": SONARR_API_KEY},
-            timeout=10,
-        )
-        r.raise_for_status()
-        data = r.json()
+        try:
+            r = requests.get(
+                f"{SONARR_URL}/api/v3/command/{command_id}",
+                headers={"X-Api-Key": SONARR_API_KEY},
+                timeout=10,
+            )
+            r.raise_for_status()
+            data = r.json()
 
-        state = data.get("state")
-        status = data.get("status")
-        error = data.get("errorMessage")
+            state = data.get("state")
+            status = data.get("status")
+            error = data.get("errorMessage")
 
-        if state == "completed" and not error and status == "completed":
-            return {"status": "done", "message": "Sonarr import completed"}
+            if job_id:
+                append_log(job_id, f"Sonarr command state={state}, status={status}, error={error}")
 
-        if error or status == "failed":
-            return {"status": "error", "message": error or "Sonarr command failed"}
+            # ✅ Success
+            if state == "completed" and not error and status == "completed":
+                if job_id:
+                    update_job(job_id, status="done", progress=100, message="Sonarr import completed")
+                return {"status": "done", "message": "Sonarr import completed"}
+
+            # ❌ Failure or rejection
+            if error or status == "failed":
+                msg = error or "Sonarr command failed"
+                if job_id:
+                    append_log(job_id, f"Sonarr command rejected: {msg}")
+                    update_job(job_id, status="error", message=msg)
+                return {"status": "error", "message": msg}
+
+        except Exception as exc:
+            if job_id:
+                append_log(job_id, f"Error polling Sonarr command: {exc}")
+            time.sleep(2)
+            continue
 
         time.sleep(2)
 
-    return {"status": "error", "message": "Sonarr import timed out"}
+    msg = f"Sonarr import timed out after {max_wait}s"
+    if job_id:
+        append_log(job_id, msg)
+        update_job(job_id, status="error", message=msg)
+    return {"status": "error", "message": msg}
  
 # --- Job creators ----------------------------------------------------------
 def _new_job_id() -> str:
