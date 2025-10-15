@@ -64,8 +64,19 @@
   background-color: var(--color-error) !important;
 }
 
-/* Add left padding to first column (header + body) */
-.table thead th:first-child,
-.table tbody td:first-child {
-  padding-left: 1rem !important;  /* adjust to 1.25rem for more space */
+/* --- Force consistent left spacing on table headers and cells --- */
+.table thead th:first-of-type,
+.table tbody td:first-of-type {
+  padding-left: 16px !important;      /* Adjust value as needed */
+}
+
+.table thead th {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+/* If the header still touches the border, add a left border gap */
+.table {
+  border-collapse: separate !important;
+  border-spacing: 4px 0;              /* adds a small gap left/right */
 }
