@@ -312,7 +312,6 @@ def replace_episode_async():
     if not key:
         return jsonify({"error": "key required"}), 400
 
-    # Create the job record
     job_id = start_replace_job(key)
 
     def job_func():
@@ -349,6 +348,21 @@ def replace_episode_async():
             grab_best_nzb(sonarr, series_id, episode_id)
             update_job(job_id, progress=35, message="NZB requested")
 
+            # Check that Sonarr actually accepted and processed the grab
+            from jobs import poll_sonarr_command
+            append_log(job_id, "Polling Sonarr command for acceptance...")
+            try:
+                # This assumes your grab_best_nzb() returns the Sonarr command ID (if not, you can grab the latest)
+                cmd_id = getattr(sonarr, "last_command_id", None)
+                if cmd_id:
+                    result = poll_sonarr_command(cmd_id, job_id=job_id, max_wait=120)
+                    if result["status"] == "error":
+                        raise RuntimeError(result["message"])
+                else:
+                    append_log(job_id, "No Sonarr command ID available; skipping command poll")
+            except Exception as cmd_err:
+                append_log(job_id, f"Sonarr command check failed: {cmd_err}")
+
             # Wait for Sonarr import to complete
             append_log(job_id, "Waiting for Sonarr import...")
             wait_for_sonarr_import(
@@ -376,7 +390,6 @@ def replace_episode_async():
 
     import threading
     threading.Thread(target=job_func, daemon=True).start()
-
     return jsonify({"job_id": job_id}), 202
 
 @app.route("/api/job-status/<job_id>", methods=["GET"])
