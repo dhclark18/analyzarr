@@ -482,9 +482,6 @@ def grab_best_nzb(
     Raises:
       RuntimeError if the Sonarr command fails or no valid candidate is found.
     """
-
-    import time, logging
-
     append = logging.info
     if job_id:
         from jobs import append_log
@@ -520,7 +517,6 @@ def grab_best_nzb(
         raise RuntimeError("Could not fetch expected episode title")
 
     # Compute confidence for each
-    from utils import compute_confidence  # or adjust path to your helper
     scored = []
     for r in top_candidates:
         title = r.get("title", "")
