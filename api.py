@@ -344,9 +344,10 @@ def replace_episode_async():
             append_log(job_id, f"Processing S{season_number:02}E{episode_number:02} for series {series_id}")
 
             # Request NZB download via Sonarr
-            append_log(job_id, "Requesting best NZB from Sonarr...")
-            grab_best_nzb(sonarr, series_id, episode_id)
-            update_job(job_id, progress=35, message="NZB requested")
+            append_log(job_id, "Polling Sonarr command for acceptance...")
+            result = poll_sonarr_command(cmd_id, job_id=job_id, max_wait=120)
+            if result["status"] == "error":
+                raise RuntimeError(result["message"])
 
             # Check that Sonarr actually accepted and processed the grab
             from jobs import poll_sonarr_command
