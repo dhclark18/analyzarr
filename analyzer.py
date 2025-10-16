@@ -462,49 +462,65 @@ def delete_episode_file(client: SonarrClient, file_id: int):
     except RequestException as e:
         logging.exception(f"❌ Failed to delete file ID {file_id}: {e}")
      
-def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: int = 5, confidence_threshold: float = 0.6):
+def grab_best_nzb(
+    client: "SonarrClient",
+    series_id: int,
+    episode_id: int,
+    job_id: str = None,
+    wait: int = 5,
+    confidence_threshold: float = 0.6,
+):
     """
-    1) Run EpisodeSearch in Sonarr to refresh indexer results.
-    2) Fetch top 25 releases for this episode.
-    3) Compute confidence against the expected title.
-    4) Keep only those exceeding a confidence threshold.
-    5) Among those, pick the one with the highest customFormatScore.
-    6) Delete any existing file for this episode.
-    7) Push the selected release back to Sonarr.
+    Extended NZB grabber that:
+      1) Runs EpisodeSearch in Sonarr to refresh indexer results.
+      2) Evaluates top 25 releases by confidence and format score.
+      3) Pushes the best candidate to Sonarr.
+      4) Returns the EpisodeSearch command ID for polling (for rejection detection).
+
+    Returns:
+      cmd_id (int)  – Sonarr command ID, usable with poll_sonarr_command()
+    Raises:
+      RuntimeError if the Sonarr command fails or no valid candidate is found.
     """
-    import time
+
+    import time, logging
 
     append = logging.info
+    if job_id:
+        from jobs import append_log
+        append = lambda msg: append_log(job_id, msg)
 
-    # Step 1: trigger Sonarr search
+    # --- Step 1: trigger Sonarr search
     cmd = client.post("command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
     if not cmd or "id" not in cmd:
         append("❌ Failed to start EpisodeSearch command")
-        return
+        raise RuntimeError("Sonarr EpisodeSearch command failed or returned no ID")
 
-    append(f"🔍 EpisodeSearch started (id={cmd['id']}) for episode {episode_id}")
+    cmd_id = cmd["id"]
+    append(f"🔍 EpisodeSearch started (id={cmd_id}) for episode {episode_id}")
     time.sleep(wait)
 
-    # Step 2: get candidate releases
+    # --- Step 2: get candidate releases
     releases = client.get(f"release?episodeId={episode_id}") or []
     candidates = [r for r in releases if r.get("mappedSeriesId") == series_id]
     if not candidates:
         append("⚠️ No releases found for this episode")
-        return
+        raise RuntimeError("No releases found for this episode")
 
-    # Step 3: sort and take top 25
+    # --- Step 3: sort and take top 25
     candidates.sort(key=lambda r: r.get("customFormatScore", 0), reverse=True)
     top_candidates = candidates[:25]
-    append(f"📦 Evaluating {len(top_candidates)} candidates by confidence and score")
+    append(f"📦 Evaluating {len(top_candidates)} candidates by custom format score")
 
-    # Step 4: get expected title
+    # --- Step 4: get expected title
     ep_details = client.get(f"episode/{episode_id}") or {}
     expected_title = ep_details.get("title", "")
     if not expected_title:
         append(f"❌ Could not fetch expected title for episode {episode_id}")
-        return
+        raise RuntimeError("Could not fetch expected episode title")
 
     # Compute confidence for each
+    from utils import compute_confidence  # or adjust path to your helper
     scored = []
     for r in top_candidates:
         title = r.get("title", "")
@@ -513,7 +529,7 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
         scored.append(r)
         append(f"🔹 '{title[:80]}' → confidence {conf:.2f}, score {r.get('customFormatScore',0)}")
 
-    # Step 5: filter by threshold and pick best by customFormatScore
+    # --- Step 5: filter by threshold and pick best
     valid = [r for r in scored if r["_confidence"] >= confidence_threshold]
     if not valid:
         append(f"⚠️ No candidate exceeded confidence threshold {confidence_threshold}")
@@ -527,20 +543,21 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
 
     append(f"🏆 Selected '{best_title}' (confidence={best_conf:.2f}, score={best_score})")
 
-    # Step 6: delete existing episode file
+    # --- Step 6: delete existing episode file
     ep = client.get(f"episode/{episode_id}") or {}
     file_id = ep.get("episodeFileId")
     if file_id:
         try:
             delete_episode_file(client, file_id)
-        except Exception:
-            logging.exception(f"Failed to delete existing file {file_id}")
+            append(f"🗑️ Deleted existing file (id={file_id})")
+        except Exception as e:
+            append(f"⚠️ Failed to delete file {file_id}: {e}")
 
-    # Step 7: push chosen release
+    # --- Step 7: push chosen release
     dl_url = best.get("downloadUrl")
     if not dl_url:
         append("❌ Selected candidate has no download URL")
-        return
+        raise RuntimeError("Selected candidate has no download URL")
 
     payload = {
         "title": best_title,
@@ -548,12 +565,18 @@ def grab_best_nzb(client: SonarrClient, series_id: int, episode_id: int, wait: i
         "protocol": best.get("protocol"),
         "publishDate": best.get("publishDate"),
     }
+
     result = client.post("release/push", payload)
     if result is not None:
         append(f"⬇️ Queued '{best_title}' for download via Sonarr (confidence {best_conf:.2f})")
     else:
         append("❌ Failed to push NZB into Sonarr")
-   
+        raise RuntimeError("Failed to push NZB into Sonarr")
+
+    # --- Return Sonarr command ID so caller can poll it
+    append(f"📡 Returning Sonarr command ID {cmd_id} for tracking")
+    return cmd_id
+ 
 # -----------------------------------------------------------------------------
 # Core Logic
 # -----------------------------------------------------------------------------
