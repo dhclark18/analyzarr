@@ -306,6 +306,9 @@ def get_conn():
         cursor_factory=RealDictCursor
     )
 @app.route("/api/episodes/replace-async", methods=["POST"])
+import logging
+import threading
+
 def replace_episode_async():
     data = request.get_json() or {}
     key = data.get("key")
@@ -314,8 +317,12 @@ def replace_episode_async():
 
     job_id = start_replace_job(key)
 
+    # --- Debug: confirm thread creation ---
+    logging.info(f"🧵 Spawning replace job thread for key={key}, job_id={job_id}")   # 👈 add this
+
     def job_func():
         try:
+            logging.info(f"🔥 job_func started for {key}")  # 👈 confirms thread actually starts
             append_log(job_id, "Replace job started")
             update_job(job_id, status="running", progress=5)
 
@@ -333,7 +340,6 @@ def replace_episode_async():
             series_id = row["series_id"]
             episode_id = row["episode_id"]
 
-            # Parse code for season/episode numbers (SxxEyy)
             import re
             match = re.match(r"S(\d{2})E(\d{2})", row["code"] or "")
             if not match:
@@ -343,28 +349,21 @@ def replace_episode_async():
 
             append_log(job_id, f"Processing S{season_number:02}E{episode_number:02} for series {series_id}")
 
-            # Request NZB download via Sonarr
+            # ✅ Grab NZB and get command ID
+            append_log(job_id, "Requesting best NZB from Sonarr...")
+            cmd_id = grab_best_nzb(sonarr, series_id, episode_id, job_id=job_id)
+            append_log(job_id, f"NZB request submitted (cmd_id={cmd_id})")
+            update_job(job_id, progress=35, message="NZB requested")
+
+            # ✅ Poll for Sonarr command result
+            from jobs import poll_sonarr_command
             append_log(job_id, "Polling Sonarr command for acceptance...")
             result = poll_sonarr_command(cmd_id, job_id=job_id, max_wait=120)
+            append_log(job_id, f"Sonarr command result: {result}")
             if result["status"] == "error":
                 raise RuntimeError(result["message"])
 
-            # Check that Sonarr actually accepted and processed the grab
-            from jobs import poll_sonarr_command
-            append_log(job_id, "Polling Sonarr command for acceptance...")
-            try:
-                # This assumes your grab_best_nzb() returns the Sonarr command ID (if not, you can grab the latest)
-                cmd_id = getattr(sonarr, "last_command_id", None)
-                if cmd_id:
-                    result = poll_sonarr_command(cmd_id, job_id=job_id, max_wait=120)
-                    if result["status"] == "error":
-                        raise RuntimeError(result["message"])
-                else:
-                    append_log(job_id, "No Sonarr command ID available; skipping command poll")
-            except Exception as cmd_err:
-                append_log(job_id, f"Sonarr command check failed: {cmd_err}")
-
-            # Wait for Sonarr import to complete
+            # ✅ Wait for import
             append_log(job_id, "Waiting for Sonarr import...")
             wait_for_sonarr_import(
                 sonarr_client=sonarr,
@@ -376,7 +375,7 @@ def replace_episode_async():
                 timeout=300
             )
 
-            # Trigger analyzer refresh for that series/season
+            # ✅ Trigger analyzer refresh
             append_log(job_id, "Triggering analyzer re-scan...")
             import subprocess
             cmd = ["python3", "/app/analyzer.py", "--series-id", str(series_id), "--season", str(season_number)]
@@ -386,11 +385,15 @@ def replace_episode_async():
             append_log(job_id, "✅ Replace job finished successfully")
 
         except Exception as e:
+            logging.exception("Unhandled error inside job_func")  # 👈 full traceback
             update_job(job_id, status="error", message=str(e))
             append_log(job_id, f"❌ Error: {e}")
 
-    import threading
-    threading.Thread(target=job_func, daemon=True).start()
+    # --- Debug: thread start confirmation ---
+    t = threading.Thread(target=job_func, daemon=True)
+    t.start()
+    logging.info(f"🚀 Replace job thread started (thread_id={t.ident})")  # 👈 add this
+
     return jsonify({"job_id": job_id}), 202
 
 @app.route("/api/job-status/<job_id>", methods=["GET"])
