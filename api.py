@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # api.py
 
+import logging
+import threading
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -306,9 +308,6 @@ def get_conn():
         cursor_factory=RealDictCursor
     )
 @app.route("/api/episodes/replace-async", methods=["POST"])
-import logging
-import threading
-
 def replace_episode_async():
     data = request.get_json() or {}
     key = data.get("key")
