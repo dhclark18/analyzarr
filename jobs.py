@@ -107,11 +107,12 @@ def poll_sonarr_command(command_id, job_id=None, max_wait=120):
             if job_id:
                 append_log(job_id, f"Sonarr command state={state}, status={status}, error={error}")
 
-            # ✅ Success (Sonarr command completed; file may still be importing)
+            # ✅ Success (Sonarr command completed; download/import happens separately)
             if state == "completed" and not error:
                 if job_id:
                     append_log(job_id, f"Sonarr command {command_id} completed — waiting for import.")
-                    update_job(job_id, progress=35, message="Command completed, waiting for import")
+                    # Nudge progress forward so UI moves past 35%
+                    update_job(job_id, progress=45, message="Command completed, waiting for import")
                 return {"status": "done", "message": "Command completed"}
 
             # ❌ Failure or rejection
