@@ -66,23 +66,16 @@ export default function SeriesDetail() {
           if (mapped.status === 'done' || mapped.status === 'error') {
             clearInterval(interval);
           
-            // Keep final message visible for 2 seconds
+            // Keep the final status in the UI — do NOT auto-refresh
+            setJobs(prev => ({
+              ...prev,
+              [key]: { ...mapped }  // preserve last status/message
+            }));
+          
+            // Optional: small delay just for smoother UX before locking in final state
             setTimeout(() => {
-              const container = wrapperRef.current;
-              const prevScroll = container ? container.scrollTop : window.scrollY;
-          
-              loadEpisodes();
-          
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  if (container && container.scrollTop !== undefined) {
-                    container.scrollTop = prevScroll;
-                  } else {
-                    window.scrollTo({ top: prevScroll });
-                  }
-                });
-              });
-            }, 2000);
+              console.log(`Job ${jobId} finished with status: ${mapped.status}`);
+            }, 1000);
           }
         } catch (err) {
           console.error('Error fetching job status:', err);
