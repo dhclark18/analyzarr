@@ -208,26 +208,40 @@ export default function SeriesDetail() {
                                     ? 'Overriding…'
                                     : 'Override'}
                                 </Button>
-                                {inProgress && job.progress !== undefined && (
+                                {job.progress !== undefined && (
                                   <>
-                                    <ProgressBar
-                                      now={job.progress}
-                                      label={`${job.progress || 0}%`}
-                                      striped
-                                      animated
-                                      className="mt-1"
-                                    />
-                                    {job.message && (
-                                      <div
-                                        className={`small mt-1 ${
-                                          job.status === 'error'
-                                            ? 'text-danger fw-bold'
-                                            : 'text-muted'
-                                        }`}
-                                      >
-                                        {job.message}
+                                    {/* Show progress bar while job is running/queued/overriding */}
+                                    {(job.status === 'running' ||
+                                      job.status === 'queued' ||
+                                      job.status === 'overriding') && (
+                                      <ProgressBar
+                                        now={job.progress}
+                                        label={`${job.progress || 0}%`}
+                                        striped
+                                        animated
+                                        className="mt-1"
+                                      />
+                                    )}
+                                
+                                    {/* Show success / error messages clearly after job finishes */}
+                                    {job.status === 'done' && (
+                                      <div className="text-success small mt-1">
+                                        ✅ {job.message || 'Replace complete'}
                                       </div>
                                     )}
+                                    {job.status === 'error' && (
+                                      <div className="text-danger small mt-1">
+                                        ❌ {job.message || 'Error during replacement'}
+                                      </div>
+                                    )}
+                                
+                                    {/* Show current message while job still running */}
+                                    {(job.status === 'running' ||
+                                      job.status === 'queued' ||
+                                      job.status === 'overriding') &&
+                                      job.message && (
+                                        <div className="text-muted small mt-1">{job.message}</div>
+                                      )}
                                   </>
                                 )}
                                 {/* ✅ Manual Close & Refresh button */}
