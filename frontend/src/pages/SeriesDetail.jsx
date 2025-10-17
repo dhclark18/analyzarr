@@ -62,22 +62,27 @@ export default function SeriesDetail() {
             message: status.message || '',
           };
           setJobs(prev => ({ ...prev, [key]: mapped }));
-
-          // ✅ Stop polling when job is done or errored (no auto-refresh)
+          // ✅ Stop polling when done/error
           if (mapped.status === 'done' || mapped.status === 'error') {
             clearInterval(interval);
-            setJobs(prev => ({
-              ...prev,
-              [key]: {
-                ...prev[key],
-                ...mapped,
-                message:
-                  mapped.message ||
-                  (mapped.status === 'done'
-                    ? '✅ Replace complete.'
-                    : '❌ An error occurred.'),
-              },
-            }));
+          
+            // Keep final message visible for 2 seconds
+            setTimeout(() => {
+              const container = wrapperRef.current;
+              const prevScroll = container ? container.scrollTop : window.scrollY;
+          
+              loadEpisodes();
+          
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  if (container && container.scrollTop !== undefined) {
+                    container.scrollTop = prevScroll;
+                  } else {
+                    window.scrollTo({ top: prevScroll });
+                  }
+                });
+              });
+            }, 2000);
           }
         } catch (err) {
           console.error('Error fetching job status:', err);
