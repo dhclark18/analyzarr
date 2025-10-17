@@ -359,8 +359,12 @@ def replace_episode_async():
             append_log(job_id, "Polling Sonarr command for acceptance...")
             result = poll_sonarr_command(cmd_id, job_id=job_id, max_wait=120)
             append_log(job_id, f"Sonarr command result: {result}")
-            if result["status"] == "error":
-                raise RuntimeError(result["message"])
+            
+            if result.get("status") == "error":
+                raise RuntimeError(result.get("message") or "Sonarr command failed")
+            
+            # Make the UI move past 35% and show the next step
+            update_job(job_id, progress=50, message="Waiting for Sonarr import")
 
             # ✅ Wait for import
             append_log(job_id, "Waiting for Sonarr import...")
