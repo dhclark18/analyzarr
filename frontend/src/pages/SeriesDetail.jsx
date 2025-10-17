@@ -9,9 +9,9 @@ export default function SeriesDetail() {
   const [episodesBySeason, setEpisodesBySeason] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [jobs, setJobs] = useState({}); // per-episode job status
+  const [jobs, setJobs] = useState({});
   const wrapperRef = useRef(null);
-  
+
   const loadEpisodes = () => {
     setLoading(true);
     setError(null);
@@ -34,81 +34,71 @@ export default function SeriesDetail() {
   }, [seriesTitle]);
 
   // --- Start a replace job ---
-const replaceEpisode = async (key) => {
-  // initialize job state
-  setJobs(prev => ({
-    ...prev,
-    [key]: { status: 'queued', progress: 0, message: 'Queued…' }
-  }));
-
-  try {
-    // enqueue job
-    const res = await fetch('/api/episodes/replace-async', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key })
-    });
-    const data = await res.json();
-    if (!data.job_id) throw new Error('No job_id returned');
-    const jobId = data.job_id;
-
-    // poll job status every 2s
-    const interval = setInterval(async () => {
-      try {
-        const r = await fetch(`/api/job-status/${jobId}`);
-        if (!r.ok) throw new Error(`Status fetch failed: ${r.status}`);
-        const status = await r.json();
-
-        // map Flask job fields to frontend
-        const mapped = {
-          status: status.status,           // running, queued, done, error
-          progress: status.progress || 0,  // 0–100
-          message: status.message || '',   // current message
-        };
-        setJobs(prev => ({ ...prev, [key]: mapped }));
-
-        // ✅ Stop polling when done/error
-        if (mapped.status === 'done' || mapped.status === 'error') {
-          // capture the scrolling container's position (fallback to window)
-          const container = wrapperRef.current;
-          const prevScroll = container ? container.scrollTop : window.scrollY;
-        
-          clearInterval(interval);
-          loadEpisodes(); // triggers re-render
-        
-          // restore after the DOM re-renders
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              if (container && container.scrollTop !== undefined) {
-                container.scrollTop = prevScroll;
-              } else {
-                window.scrollTo({ top: prevScroll });
-              }
-            });
-          });
-        }
-
-      } catch (err) {
-        console.error('Error fetching job status:', err);
-        clearInterval(interval);
-        setJobs(prev => ({
-          ...prev,
-          [key]: { status: 'error', message: err.toString(), progress: 0 }
-        }));
-      }
-    }, 2000);
-
-  } catch (err) {
-    console.error('Replace job error:', err);
+  const replaceEpisode = async (key) => {
     setJobs(prev => ({
       ...prev,
-      [key]: { status: 'error', message: err.toString(), progress: 0 }
+      [key]: { status: 'queued', progress: 0, message: 'Queued…' }
     }));
-  }
-};
+
+    try {
+      const res = await fetch('/api/episodes/replace-async', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
+      });
+      const data = await res.json();
+      if (!data.job_id) throw new Error('No job_id returned');
+      const jobId = data.job_id;
+
+      const interval = setInterval(async () => {
+        try {
+          const r = await fetch(`/api/job-status/${jobId}`);
+          if (!r.ok) throw new Error(`Status fetch failed: ${r.status}`);
+          const status = await r.json();
+
+          const mapped = {
+            status: status.status,
+            progress: status.progress || 0,
+            message: status.message || '',
+          };
+          setJobs(prev => ({ ...prev, [key]: mapped }));
+
+          // ✅ Stop polling when job is done or errored (no auto-refresh)
+          if (mapped.status === 'done' || mapped.status === 'error') {
+            clearInterval(interval);
+            setJobs(prev => ({
+              ...prev,
+              [key]: {
+                ...prev[key],
+                ...mapped,
+                message:
+                  mapped.message ||
+                  (mapped.status === 'done'
+                    ? '✅ Replace complete.'
+                    : '❌ An error occurred.'),
+              },
+            }));
+          }
+        } catch (err) {
+          console.error('Error fetching job status:', err);
+          clearInterval(interval);
+          setJobs(prev => ({
+            ...prev,
+            [key]: { status: 'error', message: err.toString(), progress: 0 },
+          }));
+        }
+      }, 2000);
+    } catch (err) {
+      console.error('Replace job error:', err);
+      setJobs(prev => ({
+        ...prev,
+        [key]: { status: 'error', message: err.toString(), progress: 0 },
+      }));
+    }
+  };
 
   const overrideEpisode = async (key) => {
-    setJobs((prev) => ({ ...prev, [key]: { ...prev[key], status: 'overriding' } }));
+    setJobs(prev => ({ ...prev, [key]: { ...prev[key], status: 'overriding' } }));
     try {
       await fetch(`/api/episode/${encodeURIComponent(key)}/tags`, {
         method: 'POST',
@@ -122,7 +112,7 @@ const replaceEpisode = async (key) => {
     } catch (err) {
       console.error(err);
     } finally {
-      setJobs((prev) => ({ ...prev, [key]: { ...prev[key], status: 'idle' } }));
+      setJobs(prev => ({ ...prev, [key]: { ...prev[key], status: 'idle' } }));
     }
   };
 
@@ -223,9 +213,29 @@ const replaceEpisode = async (key) => {
                                       className="mt-1"
                                     />
                                     {job.message && (
-                                      <div className="text-muted small">{job.message}</div>
+                                      <div
+                                        className={`small mt-1 ${
+                                          job.status === 'error'
+                                            ? 'text-danger fw-bold'
+                                            : 'text-muted'
+                                        }`}
+                                      >
+                                        {job.message}
+                                      </div>
                                     )}
                                   </>
+                                )}
+                                {/* ✅ Manual Close & Refresh button */}
+                                {(job.status === 'done' ||
+                                  job.status === 'error') && (
+                                  <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    className="mt-2"
+                                    onClick={() => loadEpisodes()}
+                                  >
+                                    Close and Refresh
+                                  </Button>
                                 )}
                               </>
                             )}
